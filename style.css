@@ -88,6 +88,38 @@ input[type="range"] { width: 100%; margin-top: 6px; }
 .itemRow { border-top: 1px dashed var(--line); padding-top: 6px; margin-top: 8px; }
 .itemRow .slots { display: flex; gap: 8px; }
 .itemRow .slots label { flex: 1; }
+/* 選択欄＋アイコンの横並び */
+.selWithIcon { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.selWithIcon select, .selWithIcon input[type="text"] { flex: 1; margin-top: 0; min-width: 0; }
+.inlineIcon {
+  width: 34px; height: 34px; flex: none;
+  border: 1px solid var(--line); border-radius: 6px;
+  background: #000; object-fit: cover;
+}
+/* アイテム欄：アイコン＋自前候補ドロップダウン */
+.itemSlot { position: relative; }
+.itemInputRow { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.itemInputRow input[type="text"] { flex: 1; margin-top: 0; min-width: 0; }
+.itemIcon {
+  width: 30px; height: 30px; flex: none;
+  border: 1px solid var(--line); border-radius: 5px;
+  background: #000; object-fit: cover;
+}
+.itemDropdown {
+  position: absolute; top: 100%; left: 0; z-index: 50;
+  min-width: 220px; margin-top: 2px;
+  background: var(--panel2);
+  border: 1px solid var(--gold); border-radius: 6px;
+  max-height: 264px; overflow-y: auto;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, .55);
+}
+.itemCandidate {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; cursor: pointer;
+  color: var(--text); font-size: 14px;
+}
+.itemCandidate:hover { background: rgba(205, 172, 106, .2); }
+.itemCandidate img { width: 28px; height: 28px; border-radius: 4px; flex: none; background: #000; }
 .comboRow { display: flex; gap: 8px; }
 .comboRow label { flex: 1; }
 .actions { display: flex; gap: 10px; }

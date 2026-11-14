@@ -68,6 +68,7 @@ const dd = {
   detailId: '',
   styles: [],             // runesReforged
   itemsByName: new Map(), // 日本語名 -> item エントリ
+  itemsByNorm: new Map(), // 空白除去した日本語名 -> item エントリ（表記ゆれ吸収用）
   itemList: [],           // {name, item}
   summoners: new Map(),   // key -> summoner エントリ
 };
@@ -95,7 +96,12 @@ async function loadDD() {
     if (!it || !it.name || !it.gold || !it.gold.purchasable) continue;
     if (it.maps && it.maps['11'] === false) continue;
     if (it.requiredAlly || it.requiredChampion) continue;
-    if (!dd.itemsByName.has(it.name)) { dd.itemsByName.set(it.name, it); dd.itemList.push({ name: it.name, item: it }); }
+    if (!dd.itemsByName.has(it.name)) {
+      dd.itemsByName.set(it.name, it);
+      const nk = normName(it.name);
+      if (!dd.itemsByNorm.has(nk)) dd.itemsByNorm.set(nk, it);
+      dd.itemList.push({ name: it.name, item: it });
+    }
   }
   dd.itemList.sort((a, b) => a.name.localeCompare(b.name, 'ja'));
 }
@@ -126,6 +132,14 @@ const passiveURL = f => `${DD}/${dd.version}/img/passive/${f}`;
 const spellURL = f => `${DD}/${dd.version}/img/spell/${f}`;
 const itemURL = it => `${DD}/${dd.version}/img/item/${it.image.full}`;
 const runeURL = r => `${DD}/img/${r.icon}`;
+
+// アイテム名の表記ゆれ（空白の有無）を吸収するための正規化
+function normName(s) { return String(s || '').replace(/[\s　]/g, '').toLowerCase(); }
+function findItemByName(name) {
+  const t = String(name || '').trim();
+  if (!t) return null;
+  return dd.itemsByName.get(t) || dd.itemsByNorm.get(normName(t)) || null;
+}
 
 // ---------- 名前の2行分割（Python版 data の lines を近似） ----------
 function splitName(name, kind, maxW, size) {
@@ -427,6 +441,58 @@ function mkTextInput(value) {
   return inp;
 }
 
+// -- フォーム側アイコン表示の更新 --
+const itemIconUpdaters = []; // DD読込後にアイテム欄アイコンを再評価するための関数群
+function setImg(img, url) {
+  if (!img) return;
+  if (url) img.src = url;
+  else img.removeAttribute('src');
+}
+function updateSummonerIcons() {
+  [['summIcon1', 0], ['summIcon2', 1]].forEach(([id, i]) => {
+    const s = dd.summoners.get(state.summoners[i]);
+    setImg($(id), s ? spellURL(s.image.full) : null);
+  });
+}
+function updateRuneStyleIcons() {
+  const ms = styleById(state.runeMain), ss = styleById(state.runeSub);
+  setImg($('runeMainIcon'), ms ? `${DD}/img/${ms.icon}` : null);
+  setImg($('runeSubIcon'), ss ? `${DD}/img/${ss.icon}` : null);
+}
+function updateSkillIcons() {
+  const det = (dd.detailId === state.championId) ? dd.detail : null;
+  const byKey = det ? spellByKey(det) : null;
+  document.querySelectorAll('#maxOrder .skillIcon').forEach(img => {
+    const sp = byKey ? byKey[state.maxOrder[+img.dataset.idx]] : null;
+    setImg(img, sp ? spellURL(sp.image.full) : null);
+  });
+  [['acqIcon1', 0], ['acqIcon2', 1], ['acqIcon3', 2]].forEach(([id, i]) => {
+    const sp = byKey ? byKey[state.acquire[i]] : null;
+    setImg($(id), sp ? spellURL(sp.image.full) : null);
+  });
+  setImg($('passiveIcon'), det && det.passive ? passiveURL(det.passive.image.full) : null);
+}
+// アイテム候補ドロップダウン（datalist の代替：アイコン付きでタップ／クリック確定）
+function showItemCandidates(inp, drop, pick) {
+  const q = normName(inp.value);
+  drop.innerHTML = '';
+  if (!q || !dd.itemList.length) { drop.hidden = true; return; }
+  const matches = dd.itemList.filter(({ name }) => normName(name).includes(q)).slice(0, 12);
+  if (!matches.length) { drop.hidden = true; return; }
+  for (const { name, item } of matches) {
+    const cand = document.createElement('div');
+    cand.className = 'itemCandidate';
+    const im = document.createElement('img');
+    im.src = itemURL(item); im.alt = '';
+    const sp = document.createElement('span');
+    sp.textContent = name;
+    cand.appendChild(im); cand.appendChild(sp);
+    cand.addEventListener('pointerdown', e => { e.preventDefault(); pick(name); });
+    drop.appendChild(cand);
+  }
+  drop.hidden = false;
+}
+
 // -- 静的コントロール（DD不要なもの）を先に組み立てる --
 function buildStaticControls() {
   // MAX順セレクト×4
@@ -434,6 +500,8 @@ function buildStaticControls() {
   ['優先1', '優先2', '優先3', '優先4'].forEach((lb, i) => {
     const wrap = document.createElement('label');
     wrap.textContent = lb;
+    const row = document.createElement('span');
+    row.className = 'selWithIcon';
     const sel = mkSelect(['Q', 'W', 'E', 'R'].map(k => ({ value: k, label: k })), state.maxOrder[i]);
     sel.dataset.idx = i;
     sel.addEventListener('change', () => {
@@ -441,9 +509,15 @@ function buildStaticControls() {
       const dup = state.maxOrder.findIndex((k, j) => j !== idx && k === v);
       if (dup >= 0) { state.maxOrder[dup] = state.maxOrder[idx]; mo.querySelectorAll('select')[dup].value = state.maxOrder[dup]; }
       state.maxOrder[idx] = v;
+      updateSkillIcons();
       changed();
     });
-    wrap.appendChild(sel); mo.appendChild(wrap);
+    const icon = document.createElement('img');
+    icon.className = 'inlineIcon skillIcon';
+    icon.alt = '';
+    icon.dataset.idx = i;
+    row.appendChild(sel); row.appendChild(icon);
+    wrap.appendChild(row); mo.appendChild(wrap);
   });
   // 取得順セレクト×3
   [['acq1', 0], ['acq2', 1], ['acq3', 2]].forEach(([id, i]) => {
@@ -455,6 +529,7 @@ function buildStaticControls() {
       const dup = state.acquire.findIndex((k, j) => j !== i && k === sel.value);
       if (dup >= 0) { state.acquire[dup] = state.acquire[i]; $('acq' + (dup + 1)).value = state.acquire[dup]; }
       state.acquire[i] = sel.value;
+      updateSkillIcons();
       changed();
     });
   });
@@ -470,11 +545,42 @@ function buildStaticControls() {
     const slots = document.createElement('div'); slots.className = 'slots';
     row.items.forEach((nm, s) => {
       const lb = document.createElement('label');
+      lb.className = 'itemSlot';
       lb.textContent = `アイテム${s + 1}`;
+      const inputRow = document.createElement('div');
+      inputRow.className = 'itemInputRow';
+      const icon = document.createElement('img');
+      icon.className = 'itemIcon';
+      icon.alt = '';
       const inp = mkTextInput(nm);
-      inp.setAttribute('list', 'itemList');
-      inp.addEventListener('input', () => { state.itemRows[r].items[s] = inp.value.trim(); changed(); });
-      lb.appendChild(inp); slots.appendChild(lb);
+      const drop = document.createElement('div');
+      drop.className = 'itemDropdown';
+      drop.hidden = true;
+      inputRow.appendChild(icon); inputRow.appendChild(inp);
+      lb.appendChild(inputRow); lb.appendChild(drop);
+      slots.appendChild(lb);
+      const refreshItemIcon = () => {
+        const it = findItemByName(inp.value);
+        if (it && dd.version) icon.src = itemURL(it);
+        else icon.removeAttribute('src');
+      };
+      itemIconUpdaters.push(refreshItemIcon);
+      const pick = name => {
+        inp.value = name;
+        state.itemRows[r].items[s] = name;
+        drop.hidden = true;
+        refreshItemIcon();
+        changed();
+      };
+      inp.addEventListener('input', () => {
+        state.itemRows[r].items[s] = inp.value.trim();
+        refreshItemIcon();
+        showItemCandidates(inp, drop, pick);
+        changed();
+      });
+      inp.addEventListener('focus', () => showItemCandidates(inp, drop, pick));
+      inp.addEventListener('blur', () => { setTimeout(() => { drop.hidden = true; }, 150); });
+      inp.addEventListener('keydown', e => { if (e.key === 'Escape') drop.hidden = true; });
     });
     div.appendChild(slots); rowsEl.appendChild(div);
   });
@@ -532,6 +638,7 @@ function buildSummonerOptions() {
     if (dd.summoners.has(state.summoners[i])) sel.value = state.summoners[i];
     state.summoners[i] = sel.value;
   });
+  updateSummonerIcons();
 }
 function buildMainPicks() {
   const style = styleById(state.runeMain);
@@ -543,9 +650,17 @@ function buildMainPicks() {
     if (!slot.runes.some(r => r.id === state.runeMainPicks[i])) state.runeMainPicks[i] = slot.runes[0].id;
     const wrap = document.createElement('label');
     wrap.textContent = names[i] || `${i + 1}段目`;
+    const row = document.createElement('span');
+    row.className = 'selWithIcon';
     const sel = mkSelect(slot.runes.map(r => ({ value: r.id, label: r.name })), String(state.runeMainPicks[i]));
-    sel.addEventListener('change', () => { state.runeMainPicks[i] = +sel.value; changed(); });
-    wrap.appendChild(sel); el.appendChild(wrap);
+    const icon = document.createElement('img');
+    icon.className = 'inlineIcon';
+    icon.alt = '';
+    const syncIcon = () => { const r = runeById(style, +sel.value); setImg(icon, r ? runeURL(r) : null); };
+    sel.addEventListener('change', () => { state.runeMainPicks[i] = +sel.value; syncIcon(); changed(); });
+    syncIcon();
+    row.appendChild(sel); row.appendChild(icon);
+    wrap.appendChild(row); el.appendChild(wrap);
   });
 }
 function buildSubPicks() {
@@ -559,6 +674,8 @@ function buildSubPicks() {
     if (!allIds.has(state.runeSubPicks[j])) state.runeSubPicks[j] = style.slots[1].runes[0].id;
     const wrap = document.createElement('label');
     wrap.textContent = `サブルーン${j + 1}`;
+    const row = document.createElement('span');
+    row.className = 'selWithIcon';
     const sel = document.createElement('select');
     style.slots.slice(1).forEach((slot, si) => {
       const og = document.createElement('optgroup');
@@ -567,8 +684,14 @@ function buildSubPicks() {
       sel.appendChild(og);
     });
     sel.value = String(state.runeSubPicks[j]);
-    sel.addEventListener('change', () => { state.runeSubPicks[j] = +sel.value; changed(); });
-    wrap.appendChild(sel); el.appendChild(wrap);
+    const icon = document.createElement('img');
+    icon.className = 'inlineIcon';
+    icon.alt = '';
+    const syncIcon = () => { const r = runeById(style, +sel.value); setImg(icon, r ? runeURL(r) : null); };
+    sel.addEventListener('change', () => { state.runeSubPicks[j] = +sel.value; syncIcon(); changed(); });
+    syncIcon();
+    row.appendChild(sel); row.appendChild(icon);
+    wrap.appendChild(row); el.appendChild(wrap);
   });
 }
 function buildRuneStyleOptions() {
@@ -582,16 +705,8 @@ function buildRuneStyleOptions() {
   $('runeSub').value = String(state.runeSub);
   state.runeMain = +$('runeMain').value;
   state.runeSub = +$('runeSub').value;
+  updateRuneStyleIcons();
   buildMainPicks(); buildSubPicks();
-}
-function buildItemList() {
-  const dl = $('itemList');
-  dl.innerHTML = '';
-  for (const { name } of dd.itemList) {
-    const op = document.createElement('option');
-    op.value = name;
-    dl.appendChild(op);
-  }
 }
 
 // -- フォームへ状態を反映 --
@@ -617,6 +732,7 @@ function applyChampionMeta(det) {
   state.difficulty = dDetail || dList || state.difficulty;
   $('difficulty').value = state.difficulty;
   $('difficultyText').value = `公式難易度 ${state.difficulty} / 10`;
+  updateSkillIcons();
 }
 let lastAutoRole = '';
 async function onChampionChange() {
@@ -658,10 +774,19 @@ function wireEvents() {
   $('splashX').addEventListener('input', e => { state.splashX = (+e.target.value) / 1000; changed(); });
   $('accent').addEventListener('input', e => { state.accent = e.target.value; changed(); });
   [['summ1', 0], ['summ2', 1]].forEach(([id, i]) => {
-    $(id).addEventListener('change', e => { state.summoners[i] = e.target.value; changed(); });
+    $(id).addEventListener('change', e => { state.summoners[i] = e.target.value; updateSummonerIcons(); changed(); });
   });
-  $('runeMain').addEventListener('change', e => { state.runeMain = +e.target.value; buildMainPicks(); changed(); });
-  $('runeSub').addEventListener('change', e => { state.runeSub = +e.target.value; buildSubPicks(); changed(); });
+  $('runeMain').addEventListener('change', e => { state.runeMain = +e.target.value; updateRuneStyleIcons(); buildMainPicks(); changed(); });
+  $('runeSub').addEventListener('change', e => { state.runeSub = +e.target.value; updateRuneStyleIcons(); buildSubPicks(); changed(); });
+  // アイテム候補ドロップダウン：欄の外をタップ／クリックしたら閉じる
+  document.addEventListener('pointerdown', e => {
+    document.querySelectorAll('.itemSlot').forEach(slot => {
+      if (!slot.contains(e.target)) {
+        const d = slot.querySelector('.itemDropdown');
+        if (d) d.hidden = true;
+      }
+    });
+  });
   $('download').addEventListener('click', () => {
     canvas.toBlob(blob => {
       if (!blob) return;
@@ -691,7 +816,7 @@ function wireEvents() {
     buildChampionOptions();
     buildSummonerOptions();
     buildRuneStyleOptions();
-    buildItemList();
+    itemIconUpdaters.forEach(f => f());
     applyStateToForm();
     const det = await loadDetail(state.championId);
     dd.detail = det; dd.detailId = state.championId;
