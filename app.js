@@ -39,8 +39,6 @@ const DEFAULTS = {
   runeSub: 8200,
   runeSubPicks: [8226, 8237],
   runeLabels: { 8401: 'シールド／バッシュ', 8473: 'ボーン／アーマー', 8226: 'マナフロー／バンド' },
-  runesHeadingSub: '鎧身形態はショートトレード最強！',
-  runesNote: '一方的に握撃を叩き込め！',
   itemsHeadingSub: '',
   itemRows: [
     { title: 'スタート', items: ['ドラン シールド', '体力ポーション', '', '', '', ''] },
@@ -300,7 +298,7 @@ function draw() {
   y += 196;
 
   // ---------- 2 スキルオーダー ----------
-  y = heading(y + 6, 'スキルオーダー', 'MAXはこれ！');
+  y = heading(y + 6, 'スキルオーダー');
   txt('MAX順', RX, y + 18, 23, COL.gold);
   if (det) {
     const byKey = spellByKey(det);
@@ -328,7 +326,7 @@ function draw() {
   y += 92;
 
   // ---------- 3 ルーン ----------
-  y = heading(y + 6, 'ルーン', state.runesHeadingSub);
+  y = heading(y + 6, 'ルーン');
   const mainStyle = styleById(state.runeMain), subStyle = styleById(state.runeSub);
   const pad = '　'.repeat(Math.max(1, 9 - (mainStyle ? mainStyle.name.length : 2)));
   txt(`メイン：${mainStyle ? mainStyle.name : ''}${pad}サブ：${subStyle ? subStyle.name : ''}`, RX, y - 4, 20, COL.gold);
@@ -349,8 +347,7 @@ function draw() {
     });
     centers.forEach(c => wrappedCenter(c.cx, y + 104, c.lines, 15));
   }
-  txt(state.runesNote, RX, y + 156, 20, COL.grey, false);
-  y += 190;
+  y += 168;
 
   // ---------- 4 アイテム ----------
   y = heading(y + 6, 'アイテムビルド', state.itemsHeadingSub);
@@ -762,8 +759,6 @@ function applyStateToForm() {
   $('splashX').value = Math.round(state.splashX * 1000);
   $('accent').value = state.accent;
   $('passiveDesc').value = state.passiveDesc;
-  $('runesHeadingSub').value = state.runesHeadingSub;
-  $('runesNote').value = state.runesNote;
   $('itemsHeadingSub').value = state.itemsHeadingSub;
 }
 function applyChampionMeta(det) {
@@ -805,8 +800,6 @@ function wireEvents() {
   bind('role', v => { state.role = v; });
   bind('catchphrase', v => state.catchphrase = v);
   bind('passiveDesc', v => state.passiveDesc = v);
-  bind('runesHeadingSub', v => state.runesHeadingSub = v);
-  bind('runesNote', v => state.runesNote = v);
   bind('itemsHeadingSub', v => state.itemsHeadingSub = v);
   $('difficulty').addEventListener('input', e => {
     let d = parseInt(e.target.value, 10);
