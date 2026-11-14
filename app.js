@@ -798,6 +798,7 @@ async function onChampionChange() {
 // -- イベント結線 --
 function wireEvents() {
   $('champSearch').addEventListener('input', e => buildChampionOptions(e.target.value.trim()));
+  $('champTitle').addEventListener('input', e => { state.title = e.target.value; changed(); });
   $('champSelect').addEventListener('change', onChampionChange);
   const bind = (id, fn) => $(id).addEventListener('input', e => { fn(e.target.value); changed(); });
   bind('patch', v => state.patch = v);
