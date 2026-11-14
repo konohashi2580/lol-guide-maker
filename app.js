@@ -533,7 +533,7 @@ function buildStaticControls() {
       changed();
     });
   });
-  // アイテム行
+  // アイテム行（上：選択済みアイコン列／下：横幅いっぱいの検索欄×1）
   const rowsEl = $('itemRows');
   state.itemRows.forEach((row, r) => {
     const div = document.createElement('div'); div.className = 'itemRow';
@@ -542,47 +542,90 @@ function buildStaticControls() {
     const tInp = mkTextInput(row.title);
     tInp.addEventListener('input', () => { state.itemRows[r].title = tInp.value; changed(); });
     tLabel.appendChild(tInp); div.appendChild(tLabel);
-    const slots = document.createElement('div'); slots.className = 'slots';
-    row.items.forEach((nm, s) => {
-      const lb = document.createElement('label');
-      lb.className = 'itemSlot';
-      lb.textContent = `アイテム${s + 1}`;
-      const inputRow = document.createElement('div');
-      inputRow.className = 'itemInputRow';
-      const icon = document.createElement('img');
-      icon.className = 'itemIcon';
-      icon.alt = '';
-      const inp = mkTextInput(nm);
-      const drop = document.createElement('div');
-      drop.className = 'itemDropdown';
-      drop.hidden = true;
-      inputRow.appendChild(icon); inputRow.appendChild(inp);
-      lb.appendChild(inputRow); lb.appendChild(drop);
-      slots.appendChild(lb);
-      const refreshItemIcon = () => {
-        const it = findItemByName(inp.value);
-        if (it && dd.version) icon.src = itemURL(it);
-        else icon.removeAttribute('src');
-      };
-      itemIconUpdaters.push(refreshItemIcon);
-      const pick = name => {
-        inp.value = name;
-        state.itemRows[r].items[s] = name;
-        drop.hidden = true;
-        refreshItemIcon();
-        changed();
-      };
-      inp.addEventListener('input', () => {
-        state.itemRows[r].items[s] = inp.value.trim();
-        refreshItemIcon();
-        showItemCandidates(inp, drop, pick);
-        changed();
+
+    // 選択済みアイテムのアイコン列（左詰め、最大6個、残りは点線の空枠）
+    const strip = document.createElement('div');
+    strip.className = 'itemStrip';
+    div.appendChild(strip);
+    const hint = document.createElement('p');
+    hint.className = 'hint';
+    hint.textContent = 'アイコンをタップすると削除できます（最大6個）';
+    div.appendChild(hint);
+
+    // 検索欄（1行に1つだけ、横幅いっぱい）
+    const searchWrap = document.createElement('div');
+    searchWrap.className = 'itemSearch';
+    const inp = mkTextInput('');
+    inp.placeholder = 'アイテム名で検索して追加（例：ホロウ）';
+    const drop = document.createElement('div');
+    drop.className = 'itemDropdown';
+    drop.hidden = true;
+    searchWrap.appendChild(inp); searchWrap.appendChild(drop);
+    div.appendChild(searchWrap);
+    rowsEl.appendChild(div);
+
+    // state は「選択済みを前に詰めた6要素配列」として保持する
+    const selectedNames = () => state.itemRows[r].items.filter(n => String(n || '').trim());
+    const writeBack = names => {
+      const arr = names.slice(0, ITEMS_PER_ROW);
+      while (arr.length < ITEMS_PER_ROW) arr.push('');
+      state.itemRows[r].items = arr;
+    };
+    const renderStrip = () => {
+      strip.innerHTML = '';
+      const names = selectedNames();
+      names.forEach((nm, idx) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'itemChip';
+        chip.title = `${nm}（タップで削除）`;
+        const it = findItemByName(nm);
+        if (it && dd.version) {
+          const im = document.createElement('img');
+          im.src = itemURL(it); im.alt = nm;
+          chip.appendChild(im);
+        } else {
+          const sp = document.createElement('span');
+          sp.className = 'itemChipName';
+          sp.textContent = nm;
+          chip.appendChild(sp);
+        }
+        const rm = document.createElement('span');
+        rm.className = 'rm';
+        rm.textContent = '×';
+        chip.appendChild(rm);
+        chip.addEventListener('click', () => {
+          const cur = selectedNames();
+          cur.splice(idx, 1);
+          writeBack(cur);
+          renderStrip();
+          changed();
+        });
+        strip.appendChild(chip);
       });
-      inp.addEventListener('focus', () => showItemCandidates(inp, drop, pick));
-      inp.addEventListener('blur', () => { setTimeout(() => { drop.hidden = true; }, 150); });
-      inp.addEventListener('keydown', e => { if (e.key === 'Escape') drop.hidden = true; });
-    });
-    div.appendChild(slots); rowsEl.appendChild(div);
+      for (let i = names.length; i < ITEMS_PER_ROW; i++) {
+        const emp = document.createElement('div');
+        emp.className = 'itemSlotEmpty';
+        strip.appendChild(emp);
+      }
+    };
+    itemIconUpdaters.push(renderStrip); // DD読込後にアイコン付きで再描画
+    renderStrip();
+
+    const pick = name => {
+      drop.hidden = true;
+      const cur = selectedNames();
+      if (cur.length >= ITEMS_PER_ROW) return; // 6個に達していたら追加しない
+      cur.push(name); // 選択した順に末尾へ（左詰め）
+      writeBack(cur);
+      inp.value = '';
+      renderStrip();
+      changed();
+    };
+    inp.addEventListener('input', () => showItemCandidates(inp, drop, pick));
+    inp.addEventListener('focus', () => showItemCandidates(inp, drop, pick));
+    inp.addEventListener('blur', () => { setTimeout(() => { drop.hidden = true; }, 150); });
+    inp.addEventListener('keydown', e => { if (e.key === 'Escape') drop.hidden = true; });
   });
   // テキストスタック類
   const stack = (elId, arr, onInput) => {
@@ -780,9 +823,9 @@ function wireEvents() {
   $('runeSub').addEventListener('change', e => { state.runeSub = +e.target.value; updateRuneStyleIcons(); buildSubPicks(); changed(); });
   // アイテム候補ドロップダウン：欄の外をタップ／クリックしたら閉じる
   document.addEventListener('pointerdown', e => {
-    document.querySelectorAll('.itemSlot').forEach(slot => {
-      if (!slot.contains(e.target)) {
-        const d = slot.querySelector('.itemDropdown');
+    document.querySelectorAll('.itemSearch').forEach(wrap => {
+      if (!wrap.contains(e.target)) {
+        const d = wrap.querySelector('.itemDropdown');
         if (d) d.hidden = true;
       }
     });

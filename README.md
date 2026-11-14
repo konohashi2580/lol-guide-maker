@@ -55,6 +55,7 @@ git push origin main
 ### 4. 更新したいとき
 
 `index.html` / `style.css` / `app.js` を差し替えて push（または再アップロード）すれば、数分で反映されます。
+その際は `index.html` 内のアセット参照の `?v=` の番号も必ず上げてください（例：`app.js?v=4` → `app.js?v=5`）。ブラウザや GitHub Pages のキャッシュで新旧ファイルが混ざって読み込まれるのを防ぐためです。
 
 ## 注意
 
