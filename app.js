@@ -273,7 +273,7 @@ function draw() {
   const stars = Math.max(0, Math.min(5, Math.round(state.difficulty / 2)));
   txt('難易度', 24, 790, 20, COL.gold);
   txt('★'.repeat(stars) + '☆'.repeat(5 - stars), 24, 816, 40, COL.star);
-  txt(`公式難易度 ${state.difficulty} / 10`, 24, 864, 19, COL.lgrey, false);
+  txt(`難易度 ${state.difficulty} / 10`, 24, 864, 19, COL.lgrey, false);
   txt('強み', 24, 916, 20, COL.gold);
   state.strengths.forEach((t, i) => txt(t, 24, 948 + i * 34, 21, COL.lgrey));
   txt('弱み', 24, 1066, 20, COL.gold);
@@ -758,7 +758,7 @@ function applyStateToForm() {
   $('role').value = state.role;
   $('catchphrase').value = state.catchphrase;
   $('difficulty').value = state.difficulty;
-  $('difficultyText').value = `公式難易度 ${state.difficulty} / 10`;
+  $('difficultyText').value = `難易度 ${state.difficulty} / 10`;
   $('splashX').value = Math.round(state.splashX * 1000);
   $('accent').value = state.accent;
   $('passiveDesc').value = state.passiveDesc;
@@ -774,7 +774,7 @@ function applyChampionMeta(det) {
   const dList = listEntry && listEntry.info && listEntry.info.difficulty > 0 ? listEntry.info.difficulty : 0;
   state.difficulty = dDetail || dList || state.difficulty;
   $('difficulty').value = state.difficulty;
-  $('difficultyText').value = `公式難易度 ${state.difficulty} / 10`;
+  $('difficultyText').value = `難易度 ${state.difficulty} / 10`;
   updateSkillIcons();
 }
 let lastAutoRole = '';
@@ -811,7 +811,7 @@ function wireEvents() {
     let d = parseInt(e.target.value, 10);
     if (isNaN(d)) d = 0;
     state.difficulty = Math.max(0, Math.min(10, d));
-    $('difficultyText').value = `公式難易度 ${state.difficulty} / 10`;
+    $('difficultyText').value = `難易度 ${state.difficulty} / 10`;
     changed();
   });
   $('splashX').addEventListener('input', e => { state.splashX = (+e.target.value) / 1000; changed(); });
