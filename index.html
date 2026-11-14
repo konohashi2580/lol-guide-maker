@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LoL 解説画像メーカー</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>LoL 解説画像メーカー</h1>
+  <p id="status" class="status">Data Dragon からデータを取得中…</p>
+</header>
+
+<main>
+  <form id="editor" autocomplete="off">
+    <fieldset>
+      <legend>基本情報</legend>
+      <label>チャンピオン検索
+        <input type="text" id="champSearch" placeholder="名前で絞り込み（例：カタ）">
+      </label>
+      <label>チャンピオン
+        <select id="champSelect"></select>
+      </label>
+      <div class="row">
+        <label>肩書き（自動）
+          <input type="text" id="champTitle" readonly>
+        </label>
+        <label>パッチ表記
+          <input type="text" id="patch" maxlength="12">
+        </label>
+      </div>
+      <label>ロール
+        <input type="text" id="role" placeholder="例：MID ・ アサシン">
+      </label>
+      <label>キャッチコピー
+        <input type="text" id="catchphrase">
+      </label>
+      <div class="row">
+        <label>公式難易度（0〜10）
+          <input type="number" id="difficulty" min="0" max="10" step="1">
+        </label>
+        <label>難易度表示
+          <input type="text" id="difficultyText" readonly>
+        </label>
+      </div>
+      <label>スプラッシュ横位置
+        <input type="range" id="splashX" min="0" max="1000" step="1">
+      </label>
+      <label>アクセントカラー
+        <input type="color" id="accent">
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>サモナースペル</legend>
+      <div class="row">
+        <label>スペル1
+          <select id="summ1"></select>
+        </label>
+        <label>スペル2
+          <select id="summ2"></select>
+        </label>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>スキルオーダー</legend>
+      <p class="hint">MAX優先順（1番目→4番目）</p>
+      <div class="row quad" id="maxOrder"></div>
+      <p class="hint">取得順</p>
+      <div class="row">
+        <label>Lv1 <select id="acq1"></select></label>
+        <label>Lv2 <select id="acq2"></select></label>
+        <label>Lv3 <select id="acq3"></select></label>
+        <label>Rタイミング <input type="text" id="rTiming"></label>
+      </div>
+      <label>パッシブ説明文（<span id="passiveName">-</span>）
+        <input type="text" id="passiveDesc">
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>ルーン</legend>
+      <label>メインパス
+        <select id="runeMain"></select>
+      </label>
+      <div id="mainPicks" class="pickGrid"></div>
+      <label>サブパス
+        <select id="runeSub"></select>
+      </label>
+      <div id="subPicks" class="pickGrid"></div>
+      <label>ルーン見出しサブ
+        <input type="text" id="runesHeadingSub">
+      </label>
+      <label>ルーン一言
+        <input type="text" id="runesNote">
+      </label>
+    </fieldset>
+
+    <fieldset>
+      <legend>アイテムビルド</legend>
+      <label>アイテム見出しサブ
+        <input type="text" id="itemsHeadingSub">
+      </label>
+      <div id="itemRows"></div>
+      <datalist id="itemList"></datalist>
+    </fieldset>
+
+    <fieldset>
+      <legend>サイドバー</legend>
+      <p class="hint">強み（3つ）</p>
+      <div id="strengths" class="stack"></div>
+      <p class="hint">弱み（2つ）</p>
+      <div id="weaknesses" class="stack"></div>
+      <p class="hint">基本コンボ（2つ）</p>
+      <div id="combos" class="stack"></div>
+      <p class="hint">合言葉（2行）</p>
+      <div id="motto" class="stack"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>勝つための3カ条</legend>
+      <div id="tips" class="stack"></div>
+    </fieldset>
+
+    <div class="actions">
+      <button type="button" id="download" class="primary">PNGをダウンロード</button>
+      <button type="button" id="reset">入力をリセット</button>
+    </div>
+    <p class="hint">入力内容はこのブラウザに自動保存されます（localStorage）。</p>
+  </form>
+
+  <section id="previewPane">
+    <canvas id="cv" width="1200" height="1738"></canvas>
+  </section>
+</main>
+
+<footer>
+  <p>このツールはファンコンテンツです。Riot Games公式ではありません。</p>
+  <p>League of Legends およびすべてのゲーム内アセット（アイコン・スプラッシュアート等）の権利は Riot Games, Inc. に帰属します。本ツールは Riot Games の「リーガルジョージー」ポリシーに基づく非公式ファンメイドツールであり、Riot Games が承認・後援するものではありません。</p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
