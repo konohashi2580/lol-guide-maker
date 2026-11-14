@@ -33,7 +33,6 @@ const DEFAULTS = {
   summoners: ['SummonerFlash', 'SummonerTeleport'],
   maxOrder: ['R', 'Q', 'W', 'E'],
   acquire: ['W', 'Q', 'E'],
-  rTiming: '6・11・16',
   passiveDesc: '敵にダメージで防御を吸収！',
   runeMain: 8400,
   runeMainPicks: [8437, 8401, 8473, 8451],
@@ -304,7 +303,7 @@ function draw() {
     });
   }
   y += 140;
-  txt(`取得： Lv1 ${state.acquire[0]} → Lv2 ${state.acquire[1]} → Lv3 ${state.acquire[2]}　／　Rは ${state.rTiming}`, RX, y, 22, COL.white);
+  txt(`取得： Lv1 ${state.acquire[0]} → Lv2 ${state.acquire[1]} → Lv3 ${state.acquire[2]}`, RX, y, 22, COL.white);
   y += 40;
   roundRectPath(RX, y, RW, 72, 10);
   ctx.fillStyle = COL.panel; ctx.fill();
@@ -604,7 +603,6 @@ function applyStateToForm() {
   $('difficultyText').value = `公式難易度 ${state.difficulty} / 10`;
   $('splashX').value = Math.round(state.splashX * 1000);
   $('accent').value = state.accent;
-  $('rTiming').value = state.rTiming;
   $('passiveDesc').value = state.passiveDesc;
   $('runesHeadingSub').value = state.runesHeadingSub;
   $('runesNote').value = state.runesNote;
@@ -646,7 +644,6 @@ function wireEvents() {
   bind('patch', v => state.patch = v);
   bind('role', v => { state.role = v; });
   bind('catchphrase', v => state.catchphrase = v);
-  bind('rTiming', v => state.rTiming = v);
   bind('passiveDesc', v => state.passiveDesc = v);
   bind('runesHeadingSub', v => state.runesHeadingSub = v);
   bind('runesNote', v => state.runesNote = v);
