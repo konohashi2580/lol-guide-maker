@@ -840,7 +840,7 @@ function wireEvents() {
   $('postX').addEventListener('click', async () => {
     const champ = dd.champions.get(state.championId);
     const name = champ ? champ.name : state.championId;
-    const text = `これが誰も知らない${name}だ！#LoL #オフメタメーカー`;
+    const text = `これが誰も知らない${name}だ！\n#LoL #オフメタメーカー\n\nhttps://konohashi2580.github.io/lol-guide-maker/`;
     const openIntent = () => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
     // スマホ等では Web Share API で画像ごと共有シートへ渡す。使えない環境（PC等）は Web Intent（テキストのみ）にフォールバック
     if (navigator.share && navigator.canShare) {
