@@ -66,6 +66,8 @@ input[type="text"], input[type="number"], select {
   font-family: inherit;
 }
 input[readonly] { opacity: .65; }
+/* プレースホルダー（例文）は入力値と見分けがつくよう十分に薄く表示する */
+input::placeholder { color: rgba(242, 244, 247, .35); }
 input[type="color"] {
   display: block;
   margin-top: 4px;

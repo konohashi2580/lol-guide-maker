@@ -22,6 +22,24 @@ const COL = {
 const TAG_JA = { Assassin: 'アサシン', Fighter: 'ファイター', Mage: 'メイジ', Marksman: 'マークスマン', Support: 'サポート', Tank: 'タンク' };
 const LS_KEY = 'lolGuideMaker.v1';
 
+// ---------- 例文（フォームの placeholder とキャンバスのゴースト表示で共用） ----------
+// ゴースト表示はプレビュー専用。書き出し（PNGダウンロード／X共有）では captureCleanBlob() が
+// ghostMode を false にして再描画してから出力するため、例文が画像に混ざることはない。
+const EXAMPLES = {
+  catchphrase: '例：茂みから、一瞬で消す。',
+  role: '例：MID ・ アサシン',
+  passiveDesc: '例：ブッシュからジャンプ攻撃！',
+  strengths: ['例：一瞬でキャリーを消し去る', '例：ブッシュからの奇襲が強烈', '例：スノーボールが止まらない'],
+  weaknesses: ['例：ブッシュ外では平凡', '例：CCに弱い'],
+  comboKeys: ['例：茂み→R→Q→W→E', '例：E→Q→W'],
+  comboNotes: ['例：茂みで待って一気に叩く', '例：牽制から入る'],
+  motto: ['例：狩りの時間だ', '例：獲物は逃がさない'],
+  tips: ['例：レベル2先行で茂みを取る', '例：茂みから出たらすぐ戻る', '例：敵キャリーを最優先で狙う'],
+  itemRowTitles: ['例：開始アイテム', '例：コアアイテム', '例：状況次第'],
+  itemsHeadingSub: '例：鉄板の組み合わせ',
+};
+let ghostMode = true; // 通常表示（プレビュー）は true。書き出しの瞬間だけ false にする
+
 // ---------- 状態 ----------
 // 開いたときは常にこの「空の状態」から始める（サンプルデータや前回の編集内容は表示しない）。
 // patch / accent / splashX のような構造上の既定値だけは値を持たせる。
@@ -190,6 +208,18 @@ function fitTxt(s, x, y, size, color, bold, maxW, minSize) {
   ctx.fillStyle = color;
   ctx.fillText(s, x, y);
 }
+// 値が空のときだけ、プレビューに例文を薄く（不透明度35%）描くゴースト表示。
+// ghostMode=false（書き出し用描画）のときは何も描かないので、例文が書き出しに含まれることはない。
+// maxW を渡すと、例文がその幅に収まるよう縮小して描く（サイドバーのはみ出し防止）。
+function gtxt(value, example, x, y, size, color, bold = true, maxW = 0, minSize = 12) {
+  if (value) { txt(value, x, y, size, color, bold); return; }
+  if (!ghostMode || !example) return;
+  ctx.save();
+  ctx.globalAlpha = 0.35;
+  if (maxW) fitTxt(example, x, y, size, color, bold, maxW, minSize);
+  else txt(example, x, y, size, color, bold);
+  ctx.restore();
+}
 function labelCenter(cx, y, text, size = 20, color = COL.lgrey, bold = true) {
   ctx.font = font(size, bold);
   const tw = ctx.measureText(text).width;
@@ -211,7 +241,7 @@ function iconBox(x, y, url, size, border = COL.gold) {
   const im = getImg(url);
   if (im) ctx.drawImage(im, x, y, size, size);
 }
-function heading(y, ja, en = '') {
+function heading(y, ja, en = '', ghostEn = '') {
   ctx.fillStyle = ACC();
   ctx.beginPath();
   ctx.moveTo(RX, y + 5); ctx.lineTo(RX + 18, y + 5); ctx.lineTo(RX + 9, y + 32); ctx.lineTo(RX - 9, y + 32);
@@ -221,6 +251,7 @@ function heading(y, ja, en = '') {
   ctx.fillStyle = COL.white;
   ctx.fillText(ja, RX + 28, y);
   if (en) txt(en, RX + 40 + wja, y + 10, 19, COL.grey);
+  else if (ghostEn) gtxt('', ghostEn, RX + 40 + wja, y + 10, 19, COL.grey);
   hline(RX, y + 52, RX + RW, y + 52, COL.line, 2);
   return y + 68;
 }
@@ -278,27 +309,27 @@ function draw() {
   fitTxt(state.championId.toUpperCase(), 24, 562, 48, COL.nameEn, true, 306, 22);
   // 日本語名は最大占有高さ（26px）前提で 614 に置き、キャッチフレーズ（652）との間に 12px のクリアランスを確保する。自動フィットで縮小した場合はさらに余白が増える
   fitTxt(champ ? champ.name : state.championId, 24, 614, 26, COL.white, true, 306, 15);
-  txt(state.catchphrase, 24, 652, 25, COL.pink);
+  gtxt(state.catchphrase, EXAMPLES.catchphrase, 24, 652, 25, COL.pink, true, 306, 15);
   hline(24, 692, 330, 692, ACC(), 3);
   txt('ロール', 24, 710, 20, COL.gold);
-  txt(state.role, 24, 738, 32, COL.white);
+  gtxt(state.role, EXAMPLES.role, 24, 738, 32, COL.white, true, 306, 20);
   const stars = Math.max(0, Math.min(5, Math.round(state.difficulty / 2)));
   txt('難易度', 24, 786, 20, COL.gold);
   txt('★'.repeat(stars) + '☆'.repeat(5 - stars), 24, 812, 40, COL.star);
   txt(`難易度 ${state.difficulty} / 10`, 24, 860, 19, COL.lgrey, false);
   txt('強み', 24, 912, 20, COL.gold);
-  state.strengths.forEach((t, i) => txt(t, 24, 944 + i * 34, 21, COL.lgrey));
+  state.strengths.forEach((t, i) => gtxt(t, EXAMPLES.strengths[i], 24, 944 + i * 34, 21, COL.lgrey, true, 306, 13));
   txt('弱み', 24, 1062, 20, COL.gold);
-  state.weaknesses.forEach((t, i) => txt(t, 24, 1094 + i * 34, 21, COL.lgrey, false));
+  state.weaknesses.forEach((t, i) => gtxt(t, EXAMPLES.weaknesses[i], 24, 1094 + i * 34, 21, COL.lgrey, false, 306, 13));
   txt('基本コンボ', 24, 1202, 20, COL.gold);
   let cy = 1234;
-  for (const c of state.combos) {
-    txt(c.keys, 24, cy, 26, COL.white);
-    txt(c.note, 24, cy + 36, 19, COL.lgrey, false);
+  state.combos.forEach((c, ci) => {
+    gtxt(c.keys, EXAMPLES.comboKeys[ci], 24, cy, 26, COL.white, true, 306, 16);
+    gtxt(c.note, EXAMPLES.comboNotes[ci], 24, cy + 36, 19, COL.lgrey, false, 306, 12);
     cy += 84;
-  }
+  });
   txt('合言葉', 24, 1420, 20, COL.gold);
-  state.motto.forEach((t, i) => txt(t, 24, 1452 + i * 34, 21, COL.lgrey, false));
+  state.motto.forEach((t, i) => gtxt(t, EXAMPLES.motto[i], 24, 1452 + i * 34, 21, COL.lgrey, false, 306, 13));
 
   // ---------- 1 サモナースペル ----------
   let y = heading(20, 'サモナースペル', 'SUMMONER SPELLS');
@@ -351,7 +382,7 @@ function draw() {
   ctx.strokeStyle = COL.line; ctx.lineWidth = 1; ctx.stroke();
   if (det) iconBox(RX + 12, y + 10, passiveURL(det.passive.image.full), 52, COL.grey);
   txt(`パッシブ：${det ? det.passive.name : ''}`, RX + 78, y + 8, 24, COL.white);
-  txt(state.passiveDesc, RX + 78, y + 38, 20, COL.pink);
+  gtxt(state.passiveDesc, EXAMPLES.passiveDesc, RX + 78, y + 38, 20, COL.pink);
   y += 92;
 
   // ---------- 3 ルーン ----------
@@ -382,9 +413,9 @@ function draw() {
   y += 168;
 
   // ---------- 4 アイテム ----------
-  y = heading(y + 6, 'アイテムビルド', state.itemsHeadingSub);
-  for (const row of state.itemRows) {
-    txt(row.title, RX, y + 26, 25, COL.gold);
+  y = heading(y + 6, 'アイテムビルド', state.itemsHeadingSub, EXAMPLES.itemsHeadingSub);
+  state.itemRows.forEach((row, ri) => {
+    gtxt(row.title, EXAMPLES.itemRowTitles[ri], RX, y + 26, 25, COL.gold);
     const items = row.items.map(n => dd.itemsByName.get(n)).filter(Boolean);
     const n = items.length;
     const x0 = RX + 116; // 504
@@ -400,21 +431,36 @@ function draw() {
       x += spacing;
     });
     y += ITEM_ROW_H;
-  }
+  });
 
   // ---------- 5 Tips ----------
   y = heading(y + 8, '勝つための3カ条', 'TIPS');
   let ty = y + 4;
-  for (const t of state.tips) {
+  state.tips.forEach((t, ti) => {
     txt('✓', RX, ty, 26, COL.green);
-    txt(t, RX + 36, ty + 2, 23, COL.lgrey);
+    gtxt(t, EXAMPLES.tips[ti], RX + 36, ty + 2, 23, COL.lgrey);
     ty += 46;
-  }
+  });
 
   // ---------- フッター ----------
   hline(RX, H - 46, W - 24, H - 46, COL.line, 1);
   txt(`アイコン・スプラッシュ：Riot Games 公式（Data Dragon ${dd.version || '-'}）／ パッチ${state.patch} ${state.role.split(' ・ ')[0]} 標準型`,
     RX, H - 38, 16, COL.grey, false);
+}
+
+// ---------- 書き出し（ゴーストなし描画との分離） ----------
+// 書き出し経路はすべてこの関数を通す：ゴーストを切って再描画したキャンバスから Blob 化し、
+// 終わったらプレビュー表示（ゴーストあり）に戻す。表示用 draw() と書き出し用描画はここで分離される。
+function captureCleanBlob() {
+  return new Promise(res => {
+    ghostMode = false;
+    draw();
+    canvas.toBlob(b => {
+      ghostMode = true;
+      draw();
+      res(b);
+    }, 'image/png');
+  });
 }
 
 // ---------- UI ----------
@@ -454,10 +500,11 @@ function mkSelect(options, value) {
   if (value !== undefined) sel.value = value;
   return sel;
 }
-function mkTextInput(value) {
+function mkTextInput(value, placeholder) {
   const inp = document.createElement('input');
   inp.type = 'text'; inp.value = value || '';
   inp.setAttribute('autocomplete', 'off');
+  if (placeholder) inp.placeholder = placeholder; // 例文は入力を始めたら消える（値にはならない）
   return inp;
 }
 
@@ -561,7 +608,7 @@ function buildStaticControls() {
     const div = document.createElement('div'); div.className = 'itemRow';
     const tLabel = document.createElement('label');
     tLabel.textContent = `行${r + 1} タイトル`;
-    const tInp = mkTextInput(row.title);
+    const tInp = mkTextInput(row.title, EXAMPLES.itemRowTitles[r]);
     tInp.addEventListener('input', () => { state.itemRows[r].title = tInp.value; changed(); });
     tLabel.appendChild(tInp); div.appendChild(tLabel);
 
@@ -650,29 +697,29 @@ function buildStaticControls() {
     inp.addEventListener('keydown', e => { if (e.key === 'Escape') drop.hidden = true; });
   });
   // テキストスタック類
-  const stack = (elId, arr, onInput, maxLen) => {
+  const stack = (elId, arr, onInput, maxLen, placeholders) => {
     const el = $(elId);
     arr.forEach((v, i) => {
-      const inp = mkTextInput(v);
+      const inp = mkTextInput(v, placeholders && placeholders[i]);
       if (maxLen) inp.maxLength = maxLen; // 入力時の上限のみ。既存の値は切り捨てない
       inp.addEventListener('input', () => { onInput(i, inp.value); changed(); });
       el.appendChild(inp);
     });
   };
-  stack('strengths', state.strengths, (i, v) => state.strengths[i] = v, 15);
-  stack('weaknesses', state.weaknesses, (i, v) => state.weaknesses[i] = v, 15);
-  stack('tips', state.tips, (i, v) => state.tips[i] = v);
-  stack('motto', state.motto, (i, v) => state.motto[i] = v);
+  stack('strengths', state.strengths, (i, v) => state.strengths[i] = v, 15, EXAMPLES.strengths);
+  stack('weaknesses', state.weaknesses, (i, v) => state.weaknesses[i] = v, 15, EXAMPLES.weaknesses);
+  stack('tips', state.tips, (i, v) => state.tips[i] = v, 0, EXAMPLES.tips);
+  stack('motto', state.motto, (i, v) => state.motto[i] = v, 0, EXAMPLES.motto);
   // コンボ（キー＋メモ）
   const combosEl = $('combos');
   state.combos.forEach((c, i) => {
     const row = document.createElement('div'); row.className = 'comboRow';
     const l1 = document.createElement('label'); l1.textContent = 'キー';
-    const kInp = mkTextInput(c.keys);
+    const kInp = mkTextInput(c.keys, EXAMPLES.comboKeys[i]);
     kInp.addEventListener('input', () => { state.combos[i].keys = kInp.value; changed(); });
     l1.appendChild(kInp);
     const l2 = document.createElement('label'); l2.textContent = 'メモ';
-    const nInp = mkTextInput(c.note);
+    const nInp = mkTextInput(c.note, EXAMPLES.comboNotes[i]);
     nInp.addEventListener('input', () => { state.combos[i].note = nInp.value; changed(); });
     l2.appendChild(nInp);
     row.appendChild(l1); row.appendChild(l2); combosEl.appendChild(row);
@@ -863,15 +910,14 @@ function wireEvents() {
       }
     });
   });
-  $('download').addEventListener('click', () => {
-    canvas.toBlob(blob => {
-      if (!blob) return;
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `${state.championId.toLowerCase()}-guide.png`;
-      a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-    }, 'image/png');
+  $('download').addEventListener('click', async () => {
+    const blob = await captureCleanBlob(); // ゴーストなしで描画したものだけを書き出す
+    if (!blob) return;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `${state.championId.toLowerCase()}-guide.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   });
   $('postX').addEventListener('click', async () => {
     const champ = dd.champions.get(state.championId);
@@ -881,7 +927,7 @@ function wireEvents() {
     // スマホ等では Web Share API で画像ごと共有シートへ渡す。使えない環境（PC等）は Web Intent（テキストのみ）にフォールバック
     if (navigator.share && navigator.canShare) {
       try {
-        const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+        const blob = await captureCleanBlob(); // 共有する画像もゴーストなしで描画したものを使う
         if (blob) {
           const file = new File([blob], `${state.championId.toLowerCase()}-guide.png`, { type: 'image/png' });
           if (navigator.canShare({ files: [file] })) {
