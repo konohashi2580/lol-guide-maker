@@ -311,21 +311,36 @@ function draw() {
   // ---------- 2 スキルオーダー ----------
   y = heading(y + 6, 'スキルオーダー');
   txt('MAX順', RX, y + 18, 23, COL.gold);
+  let skillLabelBottom = 120; // ラベル下端（セクション先頭からの相対px）。取得行はこの下に置くので、長いスキル名でも被らない
   if (det) {
     const byKey = spellByKey(det);
     const ox = RX + 104;
+    const step = 192; // 中心間隔：先頭 538 → 最終 1114。最終アイコンのバッジ右端（1114+60=1174）がメイン右端 1176 に収まる限界
+    const labelSets = state.maxOrder.map(k => {
+      const sp = byKey[k];
+      return sp ? splitName(sp.name, 'skill', step - 8, 20) : [''];
+    });
+    // 4ラベル共通サイズ：全行が中心間隔（-8px）に収まる最大サイズを実測で決める（下限12px）
+    let lsz = 20;
+    while (lsz > 12) {
+      ctx.font = font(lsz);
+      if (labelSets.every(set => set.every(ln => ctx.measureText(ln).width <= step - 8))) break;
+      lsz -= 1;
+    }
+    const labelLines = Math.max(1, ...labelSets.map(a => a.length));
+    skillLabelBottom = 100 + labelLines * (lsz + 4) - 4;
     state.maxOrder.forEach((k, i) => {
-      const sp = byKey[k], cx = ox + 46 + i * 172;
+      const sp = byKey[k], cx = ox + 46 + i * step;
       iconBox(cx - 46, y, sp ? spellURL(sp.image.full) : null, 92);
       ctx.fillStyle = ACC();
       ctx.beginPath(); ctx.arc(cx + 43, y + 75, 17, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = COL.white; ctx.lineWidth = 2; ctx.stroke();
       labelCenter(cx + 43, y + 63, k, 21, COL.white);
-      if (sp) wrappedCenter(cx, y + 100, splitName(sp.name, 'skill', 160, 20), 20);
-      if (i < 3) txt('＞', cx + 72, y + 26, 34, COL.gold);
+      if (sp) wrappedCenter(cx, y + 100, labelSets[i], lsz);
+      if (i < 3) txt('＞', cx + 79, y + 26, 34, COL.gold);
     });
   }
-  y += 140;
+  y += skillLabelBottom + 16;
   txt(`取得： Lv1 ${state.acquire[0]} → Lv2 ${state.acquire[1]} → Lv3 ${state.acquire[2]}`, RX, y, 22, COL.white);
   y += 40;
   roundRectPath(RX, y, RW, 72, 10);
