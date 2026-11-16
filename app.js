@@ -274,28 +274,29 @@ function draw() {
   ctx.fillStyle = ACC(); ctx.fillRect(SIDEBAR - 4, 0, 4, H);
   txt(`パッチ ${state.patch}`, 24, 18, 24, COL.white);
   fitTxt(state.championId.toUpperCase(), 24, 562, 48, COL.nameEn, true, 306, 22);
-  fitTxt(champ ? champ.name : state.championId, 24, 620, 26, COL.white, true, 306, 15);
-  txt(state.catchphrase, 24, 640, 25, COL.pink);
-  hline(24, 680, 330, 680, ACC(), 3);
-  txt('ロール', 24, 698, 20, COL.gold);
-  txt(state.role, 24, 726, 32, COL.white);
+  // 日本語名は最大占有高さ（26px）前提で 614 に置き、キャッチフレーズ（652）との間に 12px のクリアランスを確保する。自動フィットで縮小した場合はさらに余白が増える
+  fitTxt(champ ? champ.name : state.championId, 24, 614, 26, COL.white, true, 306, 15);
+  txt(state.catchphrase, 24, 652, 25, COL.pink);
+  hline(24, 692, 330, 692, ACC(), 3);
+  txt('ロール', 24, 710, 20, COL.gold);
+  txt(state.role, 24, 738, 32, COL.white);
   const stars = Math.max(0, Math.min(5, Math.round(state.difficulty / 2)));
-  txt('難易度', 24, 774, 20, COL.gold);
-  txt('★'.repeat(stars) + '☆'.repeat(5 - stars), 24, 800, 40, COL.star);
-  txt(`難易度 ${state.difficulty} / 10`, 24, 848, 19, COL.lgrey, false);
-  txt('強み', 24, 900, 20, COL.gold);
-  state.strengths.forEach((t, i) => txt(t, 24, 932 + i * 34, 21, COL.lgrey));
-  txt('弱み', 24, 1050, 20, COL.gold);
-  state.weaknesses.forEach((t, i) => txt(t, 24, 1082 + i * 34, 21, COL.lgrey, false));
-  txt('基本コンボ', 24, 1190, 20, COL.gold);
-  let cy = 1222;
+  txt('難易度', 24, 786, 20, COL.gold);
+  txt('★'.repeat(stars) + '☆'.repeat(5 - stars), 24, 812, 40, COL.star);
+  txt(`難易度 ${state.difficulty} / 10`, 24, 860, 19, COL.lgrey, false);
+  txt('強み', 24, 912, 20, COL.gold);
+  state.strengths.forEach((t, i) => txt(t, 24, 944 + i * 34, 21, COL.lgrey));
+  txt('弱み', 24, 1062, 20, COL.gold);
+  state.weaknesses.forEach((t, i) => txt(t, 24, 1094 + i * 34, 21, COL.lgrey, false));
+  txt('基本コンボ', 24, 1202, 20, COL.gold);
+  let cy = 1234;
   for (const c of state.combos) {
     txt(c.keys, 24, cy, 26, COL.white);
     txt(c.note, 24, cy + 36, 19, COL.lgrey, false);
     cy += 84;
   }
-  txt('合言葉', 24, 1408, 20, COL.gold);
-  state.motto.forEach((t, i) => txt(t, 24, 1440 + i * 34, 21, COL.lgrey, false));
+  txt('合言葉', 24, 1420, 20, COL.gold);
+  state.motto.forEach((t, i) => txt(t, 24, 1452 + i * 34, 21, COL.lgrey, false));
 
   // ---------- 1 サモナースペル ----------
   let y = heading(20, 'サモナースペル', 'SUMMONER SPELLS');
