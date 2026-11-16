@@ -627,16 +627,17 @@ function buildStaticControls() {
     inp.addEventListener('keydown', e => { if (e.key === 'Escape') drop.hidden = true; });
   });
   // テキストスタック類
-  const stack = (elId, arr, onInput) => {
+  const stack = (elId, arr, onInput, maxLen) => {
     const el = $(elId);
     arr.forEach((v, i) => {
       const inp = mkTextInput(v);
+      if (maxLen) inp.maxLength = maxLen; // 入力時の上限のみ。既存の値は切り捨てない
       inp.addEventListener('input', () => { onInput(i, inp.value); changed(); });
       el.appendChild(inp);
     });
   };
-  stack('strengths', state.strengths, (i, v) => state.strengths[i] = v);
-  stack('weaknesses', state.weaknesses, (i, v) => state.weaknesses[i] = v);
+  stack('strengths', state.strengths, (i, v) => state.strengths[i] = v, 15);
+  stack('weaknesses', state.weaknesses, (i, v) => state.weaknesses[i] = v, 15);
   stack('tips', state.tips, (i, v) => state.tips[i] = v);
   stack('motto', state.motto, (i, v) => state.motto[i] = v);
   // コンボ（キー＋メモ）
