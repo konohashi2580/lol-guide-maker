@@ -23,38 +23,40 @@ const TAG_JA = { Assassin: 'アサシン', Fighter: 'ファイター', Mage: '�
 const LS_KEY = 'lolGuideMaker.v1';
 
 // ---------- 状態 ----------
+// 開いたときは常にこの「空の状態」から始める（サンプルデータや前回の編集内容は表示しない）。
+// patch / accent / splashX のような構造上の既定値だけは値を持たせる。
 const DEFAULTS = {
-  championId: 'Rell',
-  title: '欺きの鎧身', // サンプル用にユーザー考案の肩書きを明示（公式は「鋼鉄の乙女」）
+  championId: '',
+  title: '',
   patch: '26.22',
-  role: 'TOP ・ タンク',
-  catchphrase: '圧倒的なファイト影響力',
-  difficulty: 6, // Data Dragon 側のレル難易度は 0 のため、サンプルでは 6 を保持
-  summoners: ['SummonerFlash', 'SummonerTeleport'],
-  maxOrder: ['R', 'Q', 'W', 'E'],
-  acquire: ['W', 'Q', 'E'],
-  passiveDesc: '敵にダメージで防御を吸収！',
-  runeMain: 8400,
-  runeMainPicks: [8437, 8401, 8473, 8451],
-  runeSub: 8200,
-  runeSubPicks: [8226, 8237],
-  runeLabels: { 8401: 'シールド／バッシュ', 8473: 'ボーン／アーマー', 8226: 'マナフロー／バンド' },
+  role: '',
+  catchphrase: '',
+  difficulty: 0,
+  summoners: ['', ''],
+  maxOrder: ['', '', '', ''],
+  acquire: ['', '', ''],
+  passiveDesc: '',
+  runeMain: '',
+  runeMainPicks: ['', '', '', ''],
+  runeSub: '',
+  runeSubPicks: ['', ''],
+  runeLabels: {},
   itemsHeadingSub: '',
   itemRows: [
-    { title: 'スタート', items: ['ドラン シールド', '体力ポーション', '', '', '', ''] },
-    { title: 'ブーツ', items: ['アイオニア ブーツ', 'マーキュリー ブーツ', 'プレート スチールキャップ', '', '', ''] },
-    { title: 'コア', items: ['ホロウ レディアンス', '終わりなき絶望', 'ジーク コンバージェンス', '', '', ''] },
+    { title: '', items: ['', '', '', '', '', ''] },
+    { title: '', items: ['', '', '', '', '', ''] },
+    { title: '', items: ['', '', '', '', '', ''] },
   ],
-  strengths: ['Qのポークで一方的に削れる！', 'Wはショートトレード最強！', 'Rで敵を逃がさない！'],
-  weaknesses: ['サステインが高い相手に弱い…', 'タンクビルドはスケールが悪め'],
+  strengths: ['', '', ''],
+  weaknesses: ['', ''],
   combos: [
-    { keys: 'W-E-Q-AA', note: 'Wが当たれば確定するコンボ！' },
-    { keys: 'Q-R-W-E', note: 'ひとりでできるCCチェイン！' },
+    { keys: '', note: '' },
+    { keys: '', note: '' },
   ],
-  tips: ['序盤はレンジ差を活かして殴り勝て！', '中盤はバミシンダーを使って一気にプッシュ！', '敵からのタワーダイブは逆転のチャンス！'],
-  motto: ['序盤の一方的なトレード力で', '対面の慢心を全て拾いきれ！'],
+  tips: ['', '', ''],
+  motto: ['', ''],
   accent: '#ffaa00',
-  splashX: 0.4966, // Python版の切り出し [430,0,780,717]（中心 x=605）と中心が一致する値
+  splashX: 0.5,
 };
 let state = JSON.parse(JSON.stringify(DEFAULTS));
 
@@ -259,7 +261,7 @@ function draw() {
 
   // ---------- 左サイドバー ----------
   ctx.fillStyle = COL.sidebar; ctx.fillRect(0, 0, SIDEBAR, H);
-  const simg = getImg(splashURL(state.championId));
+  const simg = state.championId ? getImg(splashURL(state.championId)) : null;
   if (simg) {
     const iw = simg.naturalWidth, ih = simg.naturalHeight, boxA = SIDEBAR / 542;
     let sw, sh, sx, sy;
@@ -354,14 +356,15 @@ function draw() {
 
   // ---------- 3 ルーン ----------
   y = heading(y + 6, 'ルーン');
-  const mainStyle = styleById(state.runeMain), subStyle = styleById(state.runeSub);
+  const mainStyle = state.runeMain === '' ? null : styleById(state.runeMain);
+  const subStyle = state.runeSub === '' ? null : styleById(state.runeSub);
   const pad = '　'.repeat(Math.max(1, 9 - (mainStyle ? mainStyle.name.length : 2)));
   txt(`メイン：${mainStyle ? mainStyle.name : ''}${pad}サブ：${subStyle ? subStyle.name : ''}`, RX, y - 4, 20, COL.gold);
   y += 28;
-  if (mainStyle && subStyle) {
+  if (mainStyle || subStyle) {
     const picks = [
-      ...state.runeMainPicks.map(id => ({ r: runeById(mainStyle, id), size: 0 })),
-      ...state.runeSubPicks.map(id => ({ r: runeById(subStyle, id), size: 76 })),
+      ...state.runeMainPicks.map(id => ({ r: mainStyle ? runeById(mainStyle, id) : null, size: 0 })),
+      ...state.runeSubPicks.map(id => ({ r: subStyle ? runeById(subStyle, id) : null, size: 76 })),
     ];
     picks.forEach((p, i) => { p.size = i === 0 ? 96 : 76; });
     // ラベル（最大幅120px）が隣と重ならないよう、アイコン中心を等間隔に配置する
@@ -421,22 +424,13 @@ function setStatus(msg, isError = false) {
   statusEl.textContent = msg;
   statusEl.classList.toggle('error', isError);
 }
-let saveTimer = null;
-function save() {
-  clearTimeout(saveTimer);
-  saveTimer = setTimeout(() => { try { localStorage.setItem(LS_KEY, JSON.stringify(state)); } catch (e) { /* 保存不可でも動作継続 */ } }, 250);
-}
+// 入力内容は保存しない。開くたびに空の状態から始める仕様のため、save() は何もしない。
+// （changed() からの呼び出し口は残し、描画だけが走るようにしている）
+function save() { /* no-op: localStorage への保存は廃止 */ }
 function changed() { save(); draw(); }
-function restore() {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return;
-    const s = JSON.parse(raw);
-    state = Object.assign(JSON.parse(JSON.stringify(DEFAULTS)), s);
-    // title / runeLabels を持たない旧保存データでは、サンプル値を混ぜず自動（空）にする
-    if (!Object.prototype.hasOwnProperty.call(s, 'title')) state.title = '';
-    if (!Object.prototype.hasOwnProperty.call(s, 'runeLabels')) state.runeLabels = {};
-  } catch (e) { /* 壊れた保存データは無視 */ }
+// 旧バージョンが localStorage に残した保存データは読み込まず、掃除だけしておく
+function purgeSavedState() {
+  try { localStorage.removeItem(LS_KEY); } catch (e) { /* noop */ }
 }
 // アイテム行を「3行×最大6個」に正規化する（旧データの4行目は切り捨て）
 function normalizeItemRows() {
@@ -481,7 +475,8 @@ function updateSummonerIcons() {
   });
 }
 function updateRuneStyleIcons() {
-  const ms = styleById(state.runeMain), ss = styleById(state.runeSub);
+  const ms = state.runeMain === '' ? null : styleById(state.runeMain);
+  const ss = state.runeSub === '' ? null : styleById(state.runeSub);
   setImg($('runeMainIcon'), ms ? `${DD}/img/${ms.icon}` : null);
   setImg($('runeSubIcon'), ss ? `${DD}/img/${ss.icon}` : null);
 }
@@ -528,11 +523,11 @@ function buildStaticControls() {
     wrap.textContent = lb;
     const row = document.createElement('span');
     row.className = 'selWithIcon';
-    const sel = mkSelect(['Q', 'W', 'E', 'R'].map(k => ({ value: k, label: k })), state.maxOrder[i]);
+    const sel = mkSelect([{ value: '', label: '（未選択）' }, ...['Q', 'W', 'E', 'R'].map(k => ({ value: k, label: k }))], state.maxOrder[i]);
     sel.dataset.idx = i;
     sel.addEventListener('change', () => {
       const idx = +sel.dataset.idx, v = sel.value;
-      const dup = state.maxOrder.findIndex((k, j) => j !== idx && k === v);
+      const dup = v === '' ? -1 : state.maxOrder.findIndex((k, j) => j !== idx && k === v);
       if (dup >= 0) { state.maxOrder[dup] = state.maxOrder[idx]; mo.querySelectorAll('select')[dup].value = state.maxOrder[dup]; }
       state.maxOrder[idx] = v;
       updateSkillIcons();
@@ -549,10 +544,11 @@ function buildStaticControls() {
   [['acq1', 0], ['acq2', 1], ['acq3', 2]].forEach(([id, i]) => {
     const sel = $(id);
     sel.innerHTML = '';
+    const emptyOp = document.createElement('option'); emptyOp.value = ''; emptyOp.textContent = '（未選択）'; sel.appendChild(emptyOp);
     ['Q', 'W', 'E'].forEach(k => { const op = document.createElement('option'); op.value = k; op.textContent = k; sel.appendChild(op); });
     sel.value = state.acquire[i];
     sel.addEventListener('change', () => {
-      const dup = state.acquire.findIndex((k, j) => j !== i && k === sel.value);
+      const dup = sel.value === '' ? -1 : state.acquire.findIndex((k, j) => j !== i && k === sel.value);
       if (dup >= 0) { state.acquire[dup] = state.acquire[i]; $('acq' + (dup + 1)).value = state.acquire[dup]; }
       state.acquire[i] = sel.value;
       updateSkillIcons();
@@ -687,6 +683,9 @@ function buildStaticControls() {
 function buildChampionOptions(filter = '') {
   const sel = $('champSelect');
   sel.innerHTML = '';
+  const emptyOp = document.createElement('option');
+  emptyOp.value = ''; emptyOp.textContent = '（チャンピオンを選択）';
+  sel.appendChild(emptyOp);
   const list = [...dd.champions.values()]
     .filter(c => !filter || c.name.includes(filter) || c.id.toLowerCase().includes(filter.toLowerCase()))
     .sort((a, b) => a.name.localeCompare(b.name, 'ja'));
@@ -696,11 +695,12 @@ function buildChampionOptions(filter = '') {
     sel.appendChild(op);
   }
   if (dd.champions.has(state.championId) && [...sel.options].some(o => o.value === state.championId)) sel.value = state.championId;
+  else sel.value = '';
 }
 function buildSummonerOptions() {
-  const opts = [...dd.summoners.entries()]
+  const opts = [{ value: '', label: '（未選択）' }, ...[...dd.summoners.entries()]
     .map(([key, s]) => ({ value: key, label: s.name }))
-    .sort((a, b) => a.label.localeCompare(b.label, 'ja'));
+    .sort((a, b) => a.label.localeCompare(b.label, 'ja'))];
   [['summ1', 0], ['summ2', 1]].forEach(([id, i]) => {
     const sel = $(id);
     sel.innerHTML = '';
@@ -717,17 +717,17 @@ function buildMainPicks() {
   if (!style) return;
   const names = ['キーストーン', '2段目', '3段目', '4段目'];
   style.slots.forEach((slot, i) => {
-    if (!slot.runes.some(r => r.id === state.runeMainPicks[i])) state.runeMainPicks[i] = slot.runes[0].id;
+    if (state.runeMainPicks[i] !== '' && !slot.runes.some(r => r.id === state.runeMainPicks[i])) state.runeMainPicks[i] = slot.runes[0].id;
     const wrap = document.createElement('label');
     wrap.textContent = names[i] || `${i + 1}段目`;
     const row = document.createElement('span');
     row.className = 'selWithIcon';
-    const sel = mkSelect(slot.runes.map(r => ({ value: r.id, label: r.name })), String(state.runeMainPicks[i]));
+    const sel = mkSelect([{ value: '', label: '（未選択）' }, ...slot.runes.map(r => ({ value: r.id, label: r.name }))], String(state.runeMainPicks[i]));
     const icon = document.createElement('img');
     icon.className = 'inlineIcon';
     icon.alt = '';
     const syncIcon = () => { const r = runeById(style, +sel.value); setImg(icon, r ? runeURL(r) : null); };
-    sel.addEventListener('change', () => { state.runeMainPicks[i] = +sel.value; syncIcon(); changed(); });
+    sel.addEventListener('change', () => { state.runeMainPicks[i] = sel.value === '' ? '' : +sel.value; syncIcon(); changed(); });
     syncIcon();
     row.appendChild(sel); row.appendChild(icon);
     wrap.appendChild(row); el.appendChild(wrap);
@@ -741,12 +741,15 @@ function buildSubPicks() {
   const allIds = new Set();
   style.slots.forEach(s => s.runes.forEach(r => allIds.add(r.id)));
   [0, 1].forEach(j => {
-    if (!allIds.has(state.runeSubPicks[j])) state.runeSubPicks[j] = style.slots[1].runes[0].id;
+    if (state.runeSubPicks[j] !== '' && !allIds.has(state.runeSubPicks[j])) state.runeSubPicks[j] = style.slots[1].runes[0].id;
     const wrap = document.createElement('label');
     wrap.textContent = `サブルーン${j + 1}`;
     const row = document.createElement('span');
     row.className = 'selWithIcon';
     const sel = document.createElement('select');
+    const emptyOp = document.createElement('option');
+    emptyOp.value = ''; emptyOp.textContent = '（未選択）';
+    sel.appendChild(emptyOp);
     style.slots.slice(1).forEach((slot, si) => {
       const og = document.createElement('optgroup');
       og.label = `${si + 2}段目`;
@@ -758,14 +761,14 @@ function buildSubPicks() {
     icon.className = 'inlineIcon';
     icon.alt = '';
     const syncIcon = () => { const r = runeById(style, +sel.value); setImg(icon, r ? runeURL(r) : null); };
-    sel.addEventListener('change', () => { state.runeSubPicks[j] = +sel.value; syncIcon(); changed(); });
+    sel.addEventListener('change', () => { state.runeSubPicks[j] = sel.value === '' ? '' : +sel.value; syncIcon(); changed(); });
     syncIcon();
     row.appendChild(sel); row.appendChild(icon);
     wrap.appendChild(row); el.appendChild(wrap);
   });
 }
 function buildRuneStyleOptions() {
-  const opts = dd.styles.map(s => ({ value: s.id, label: s.name }));
+  const opts = [{ value: '', label: '（未選択）' }, ...dd.styles.map(s => ({ value: s.id, label: s.name }))];
   [['runeMain', 'runeMain'], ['runeSub', 'runeSub']].forEach(([id]) => {
     const sel = $(id);
     sel.innerHTML = '';
@@ -773,8 +776,8 @@ function buildRuneStyleOptions() {
   });
   $('runeMain').value = String(state.runeMain);
   $('runeSub').value = String(state.runeSub);
-  state.runeMain = +$('runeMain').value;
-  state.runeSub = +$('runeSub').value;
+  state.runeMain = $('runeMain').value === '' ? '' : +$('runeMain').value;
+  state.runeSub = $('runeSub').value === '' ? '' : +$('runeSub').value;
   updateRuneStyleIcons();
   buildMainPicks(); buildSubPicks();
 }
@@ -804,7 +807,15 @@ function applyChampionMeta(det) {
 let lastAutoRole = '';
 async function onChampionChange() {
   const id = $('champSelect').value;
-  if (!id || !dd.champions.has(id)) return;
+  if (!id) { // 「未選択」に戻したときはチャンピオン詳細をクリアする
+    state.championId = '';
+    dd.detail = null; dd.detailId = '';
+    $('passiveName').textContent = '-';
+    updateSkillIcons();
+    changed();
+    return;
+  }
+  if (!dd.champions.has(id)) return;
   state.championId = id;
   try {
     const det = await loadDetail(id);
@@ -841,8 +852,8 @@ function wireEvents() {
   [['summ1', 0], ['summ2', 1]].forEach(([id, i]) => {
     $(id).addEventListener('change', e => { state.summoners[i] = e.target.value; updateSummonerIcons(); changed(); });
   });
-  $('runeMain').addEventListener('change', e => { state.runeMain = +e.target.value; updateRuneStyleIcons(); buildMainPicks(); changed(); });
-  $('runeSub').addEventListener('change', e => { state.runeSub = +e.target.value; updateRuneStyleIcons(); buildSubPicks(); changed(); });
+  $('runeMain').addEventListener('change', e => { state.runeMain = e.target.value === '' ? '' : +e.target.value; updateRuneStyleIcons(); buildMainPicks(); changed(); });
+  $('runeSub').addEventListener('change', e => { state.runeSub = e.target.value === '' ? '' : +e.target.value; updateRuneStyleIcons(); buildSubPicks(); changed(); });
   // アイテム候補ドロップダウン：欄の外をタップ／クリックしたら閉じる
   document.addEventListener('pointerdown', e => {
     document.querySelectorAll('.itemSearch').forEach(wrap => {
@@ -895,7 +906,7 @@ function wireEvents() {
 
 // ---------- 初期化 ----------
 (async function init() {
-  restore();
+  purgeSavedState(); // 旧保存データは復元しない（常に空の状態から始める）
   normalizeItemRows();
   buildStaticControls();
   applyStateToForm();
@@ -908,9 +919,11 @@ function wireEvents() {
     buildRuneStyleOptions();
     itemIconUpdaters.forEach(f => f());
     applyStateToForm();
-    const det = await loadDetail(state.championId);
-    dd.detail = det; dd.detailId = state.championId;
-    applyChampionMeta(det);
+    if (state.championId) {
+      const det = await loadDetail(state.championId);
+      dd.detail = det; dd.detailId = state.championId;
+      applyChampionMeta(det);
+    }
     setStatus(`Data Dragon ${dd.version}（ja_JP）のデータで描画しています。アイコン等は公式CDNから読み込みます。`);
     draw();
   } catch (e) {
