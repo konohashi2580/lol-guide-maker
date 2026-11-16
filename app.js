@@ -837,6 +837,31 @@ function wireEvents() {
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
     }, 'image/png');
   });
+  $('postX').addEventListener('click', async () => {
+    const champ = dd.champions.get(state.championId);
+    const name = champ ? champ.name : state.championId;
+    const text = `これが誰も知らない${name}だ！#LoL #オフメタメーカー`;
+    const openIntent = () => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+    // スマホ等では Web Share API で画像ごと共有シートへ渡す。使えない環境（PC等）は Web Intent（テキストのみ）にフォールバック
+    if (navigator.share && navigator.canShare) {
+      try {
+        const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+        if (blob) {
+          const file = new File([blob], `${state.championId.toLowerCase()}-guide.png`, { type: 'image/png' });
+          if (navigator.canShare({ files: [file] })) {
+            try {
+              await navigator.share({ files: [file], text });
+            } catch (e) {
+              // ユーザーのキャンセル（AbortError）は静かに終了。それ以外は Intent を開く
+              if (!e || e.name !== 'AbortError') openIntent();
+            }
+            return;
+          }
+        }
+      } catch (e) { /* Blob化に失敗した場合は Intent へ */ }
+    }
+    openIntent();
+  });
   $('reset').addEventListener('click', () => {
     try { localStorage.removeItem(LS_KEY); } catch (e) { /* noop */ }
     location.reload();
