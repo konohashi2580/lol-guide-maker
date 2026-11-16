@@ -7,8 +7,8 @@
 // ---------- 定数 ----------
 const DD = 'https://ddragon.leagueoflegends.com/cdn';
 const W = 1200;
-const BASE_H = 1880, ITEM_ROW_H = 142, ITEM_ROWS_MAX = 3, ITEMS_PER_ROW = 6;
-let H = BASE_H - (4 - ITEM_ROWS_MAX) * ITEM_ROW_H; // アイテム3行なら 1738
+const BASE_H = 1760, ITEM_ROW_H = 112, ITEM_ROWS_MAX = 3, ITEMS_PER_ROW = 6;
+let H = BASE_H - (4 - ITEM_ROWS_MAX) * ITEM_ROW_H; // アイテム3行なら 1648（名前ラベル廃止に合わせて行ピッチを 142→112 に詰めた）
 const SIDEBAR = 360;
 const RX = SIDEBAR + 28, RW = W - RX - 24, CX = RX + RW / 2;
 const FONT_STACK = '"Hiragino Kaku Gothic ProN","Hiragino Sans","Noto Sans CJK JP","Yu Gothic UI","Yu Gothic",sans-serif';
@@ -245,7 +245,7 @@ function runeById(style, id) {
 
 function draw() {
   if (!canvas) return;
-  // キャンバス高さはアイテム行数に応じて詰める（4行=1880、3行=1738）
+  // キャンバス高さはアイテム行数に応じて詰める（4行=1760、3行=1648）
   const targetH = BASE_H - (4 - state.itemRows.length) * ITEM_ROW_H;
   if (canvas.height !== targetH) canvas.height = targetH;
   H = targetH;
@@ -388,14 +388,14 @@ function draw() {
     let x = x0;
     items.forEach((it, j) => {
       iconBox(x, y, itemURL(it), 84);
-      wrappedCenter(x + 42, y + 92, splitName(it.name, 'item', 192, 16), 16);
+      // アイテム名は画像に表示しない（ユーザーの決定）。アイコンのみ並べる
       if (j < n - 1) {
         const ax = x + 84 + Math.max(2, Math.floor((spacing - 84 - 30) / 2));
         txt('→', ax, y + 24, spacing >= 150 ? 30 : 22, COL.gold);
       }
       x += spacing;
     });
-    y += 142;
+    y += ITEM_ROW_H;
   }
 
   // ---------- 5 Tips ----------
