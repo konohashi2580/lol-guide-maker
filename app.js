@@ -337,13 +337,15 @@ function draw() {
       ...state.runeSubPicks.map(id => ({ r: runeById(subStyle, id), size: 76 })),
     ];
     picks.forEach((p, i) => { p.size = i === 0 ? 96 : 76; });
-    let x = RX + 2;
+    // ラベル（最大幅120px）が隣と重ならないよう、アイコン中心を等間隔に配置する
+    const step = 132;
+    const cx0 = RX + 2 + 48; // 先頭アイコン（96px）の左端は従来どおり RX+2
     const centers = [];
     picks.forEach((p, i) => {
-      if (p.r) iconBox(x, y + (96 - p.size) / 2, runeURL(p.r), p.size, i === 0 ? ACC() : COL.gold);
-      centers.push({ cx: x + p.size / 2, lines: p.r ? splitName((state.runeLabels && state.runeLabels[p.r.id]) || p.r.name, 'rune', 120, 15) : [''] });
-      x += p.size + 22;
-      if (i === 3) hline(x - 11, y, x - 11, y + 96, COL.line, 2);
+      const cx = cx0 + i * step;
+      if (p.r) iconBox(cx - p.size / 2, y + (96 - p.size) / 2, runeURL(p.r), p.size, i === 0 ? ACC() : COL.gold);
+      centers.push({ cx, lines: p.r ? splitName((state.runeLabels && state.runeLabels[p.r.id]) || p.r.name, 'rune', 120, 15) : [''] });
+      if (i === 3) { const dx = cx0 + 3.5 * step; hline(dx, y, dx, y + 96, COL.line, 2); }
     });
     centers.forEach(c => wrappedCenter(c.cx, y + 104, c.lines, 15));
   }
