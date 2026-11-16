@@ -177,6 +177,17 @@ function txt(s, x, y, size, color, bold = true) {
   ctx.fillStyle = color;
   ctx.fillText(s, x, y);
 }
+// 幅 maxW に収まるまでフォントサイズを 2px ずつ縮小して描く（下限 minSize）。実測ベースなので長い名前でも必ず収まる
+function fitTxt(s, x, y, size, color, bold, maxW, minSize) {
+  let sz = size;
+  ctx.font = font(sz, bold);
+  while (sz > minSize && ctx.measureText(s).width > maxW) {
+    sz = Math.max(minSize, sz - 2);
+    ctx.font = font(sz, bold);
+  }
+  ctx.fillStyle = color;
+  ctx.fillText(s, x, y);
+}
 function labelCenter(cx, y, text, size = 20, color = COL.lgrey, bold = true) {
   ctx.font = font(size, bold);
   const tw = ctx.measureText(text).width;
@@ -262,29 +273,29 @@ function draw() {
   }
   ctx.fillStyle = ACC(); ctx.fillRect(SIDEBAR - 4, 0, 4, H);
   txt(`パッチ ${state.patch}`, 24, 18, 24, COL.white);
-  txt(state.championId.toUpperCase(), 24, 562, 48, COL.nameEn);
-  txt(`${champ ? champ.name : state.championId} ・ ${state.title || (champ ? champ.title : '')}`, 24, 620, 26, COL.white);
-  txt(state.catchphrase, 24, 656, 25, COL.pink);
-  hline(24, 696, 330, 696, ACC(), 3);
-  txt('ロール', 24, 714, 20, COL.gold);
-  txt(state.role, 24, 742, 32, COL.white);
+  fitTxt(state.championId.toUpperCase(), 24, 562, 48, COL.nameEn, true, 306, 22);
+  fitTxt(champ ? champ.name : state.championId, 24, 620, 26, COL.white, true, 306, 15);
+  txt(state.catchphrase, 24, 640, 25, COL.pink);
+  hline(24, 680, 330, 680, ACC(), 3);
+  txt('ロール', 24, 698, 20, COL.gold);
+  txt(state.role, 24, 726, 32, COL.white);
   const stars = Math.max(0, Math.min(5, Math.round(state.difficulty / 2)));
-  txt('難易度', 24, 790, 20, COL.gold);
-  txt('★'.repeat(stars) + '☆'.repeat(5 - stars), 24, 816, 40, COL.star);
-  txt(`難易度 ${state.difficulty} / 10`, 24, 864, 19, COL.lgrey, false);
-  txt('強み', 24, 916, 20, COL.gold);
-  state.strengths.forEach((t, i) => txt(t, 24, 948 + i * 34, 21, COL.lgrey));
-  txt('弱み', 24, 1066, 20, COL.gold);
-  state.weaknesses.forEach((t, i) => txt(t, 24, 1098 + i * 34, 21, COL.lgrey, false));
-  txt('基本コンボ', 24, 1206, 20, COL.gold);
-  let cy = 1238;
+  txt('難易度', 24, 774, 20, COL.gold);
+  txt('★'.repeat(stars) + '☆'.repeat(5 - stars), 24, 800, 40, COL.star);
+  txt(`難易度 ${state.difficulty} / 10`, 24, 848, 19, COL.lgrey, false);
+  txt('強み', 24, 900, 20, COL.gold);
+  state.strengths.forEach((t, i) => txt(t, 24, 932 + i * 34, 21, COL.lgrey));
+  txt('弱み', 24, 1050, 20, COL.gold);
+  state.weaknesses.forEach((t, i) => txt(t, 24, 1082 + i * 34, 21, COL.lgrey, false));
+  txt('基本コンボ', 24, 1190, 20, COL.gold);
+  let cy = 1222;
   for (const c of state.combos) {
     txt(c.keys, 24, cy, 26, COL.white);
     txt(c.note, 24, cy + 36, 19, COL.lgrey, false);
     cy += 84;
   }
-  txt('合言葉', 24, 1424, 20, COL.gold);
-  state.motto.forEach((t, i) => txt(t, 24, 1456 + i * 34, 21, COL.lgrey, false));
+  txt('合言葉', 24, 1408, 20, COL.gold);
+  state.motto.forEach((t, i) => txt(t, 24, 1440 + i * 34, 21, COL.lgrey, false));
 
   // ---------- 1 サモナースペル ----------
   let y = heading(20, 'サモナースペル', 'SUMMONER SPELLS');
@@ -766,7 +777,6 @@ function applyStateToForm() {
 }
 function applyChampionMeta(det) {
   const listEntry = dd.champions.get(state.championId || det.id);
-  $('champTitle').value = state.title || det.title || (listEntry && listEntry.title) || '';
   $('passiveName').textContent = det.passive ? det.passive.name : '-';
   const dDetail = det.info && det.info.difficulty > 0 ? det.info.difficulty : 0;
   const dList = listEntry && listEntry.info && listEntry.info.difficulty > 0 ? listEntry.info.difficulty : 0;
@@ -796,7 +806,6 @@ async function onChampionChange() {
 // -- イベント結線 --
 function wireEvents() {
   $('champSearch').addEventListener('input', e => buildChampionOptions(e.target.value.trim()));
-  $('champTitle').addEventListener('input', e => { state.title = e.target.value; changed(); });
   $('champSelect').addEventListener('change', onChampionChange);
   const bind = (id, fn) => $(id).addEventListener('input', e => { fn(e.target.value); changed(); });
   bind('patch', v => state.patch = v);
