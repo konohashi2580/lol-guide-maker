@@ -23,7 +23,7 @@ const TAG_JA = { Assassin: 'アサシン', Fighter: 'ファイター', Mage: '�
 const LS_KEY = 'lolGuideMaker.v1';
 
 // ---------- 例文（フォームの placeholder とキャンバスのゴースト表示で共用） ----------
-// ゴースト表示はプレビュー専用。書き出し（PNGダウンロード／X共有）では captureCleanBlob() が
+// ゴースト表示はプレビュー専用。書き出し（PNGダウンロード／共有用の画像）では captureCleanBlob() が
 // ghostMode を false にして再描画してから出力するため、例文が画像に混ざることはない。
 const EXAMPLES = {
   catchphrase: '例：茂みから、一瞬で消す。',
@@ -923,26 +923,20 @@ function wireEvents() {
     const champ = dd.champions.get(state.championId);
     const name = champ ? champ.name : state.championId;
     const text = `これが誰も知らない${name}だ！\n#LoL #オフメタメーカー\n\nhttps://konohashi2580.github.io/lol-guide-maker/`;
-    const openIntent = () => window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
-    // スマホ等では Web Share API で画像ごと共有シートへ渡す。使えない環境（PC等）は Web Intent（テキストのみ）にフォールバック
-    if (navigator.share && navigator.canShare) {
+    const blob = await captureCleanBlob(); // 共有する画像もゴーストなしで描画したものを使う
+    if (!blob) return;
+    const file = new File([blob], `${state.championId.toLowerCase()}-guide.png`, { type: 'image/png' });
+    // 共有シート方式：Web Share API（ファイル共有）対応環境では、画像と投稿文を
+    // 共有シートで渡す。共有先にXを選べば、そのまま画像付きで投稿できる。
+    // 共有をキャンセルした場合はエラー表示を出さない。
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
       try {
-        const blob = await captureCleanBlob(); // 共有する画像もゴーストなしで描画したものを使う
-        if (blob) {
-          const file = new File([blob], `${state.championId.toLowerCase()}-guide.png`, { type: 'image/png' });
-          if (navigator.canShare({ files: [file] })) {
-            try {
-              await navigator.share({ files: [file], text });
-            } catch (e) {
-              // ユーザーのキャンセル（AbortError）は静かに終了。それ以外は Intent を開く
-              if (!e || e.name !== 'AbortError') openIntent();
-            }
-            return;
-          }
-        }
-      } catch (e) { /* Blob化に失敗した場合は Intent へ */ }
+        await navigator.share({ files: [file], text });
+      } catch (e) { /* キャンセル等は無視する */ }
+      return;
     }
-    openIntent();
+    // Web Share が使えない環境（PC等）では、Web Intent でテキストのみの投稿画面を開く。
+    window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
   });
   $('reset').addEventListener('click', () => {
     try { localStorage.removeItem(LS_KEY); } catch (e) { /* noop */ }
