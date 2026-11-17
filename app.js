@@ -469,35 +469,89 @@ function captureCleanBlob() {
   });
 }
 
-// ---------- ビルドのURL埋め込み（?d=v1.<base64url>） ----------
-// フォーム状態一式を短いキーで JSON 化し、UTF-8 → base64url で URL パラメータに載せる。
+// ---------- ビルドのURL埋め込み（?d=v1.<base64url> / ?d=v2.<圧縮base64url>） ----------
+// フォーム状態一式を短いキーで JSON 化し、URL パラメータに載せる。
+//   v1: JSON を UTF-8 → base64url 化したもの
+//   v2: JSON を deflate-raw 圧縮（CompressionStream）→ base64url 化したもの
+// 生成側は v1 / v2 のうち短い方を選ぶ（極小ビルドでは圧縮が逆効果なことがあるため）。
+// CompressionStream が無い古いブラウザでは生成は v1 のみになる。
+// 読み込み側は v1 / v2 両対応で、既に共有された v1 リンクもそのまま開ける。
+// DecompressionStream が無い環境で v2 リンクを開いた場合や、解凍・デコードに
+// 失敗した場合は、エラーにせず通常の空スタートにフォールバックする。
 // 識別子は Data Dragon の安定ID（チャンピオンID／サモナースペルキー／ルーンID／アイテムID）を使う。
 // アイテムだけは state 上は日本語名で保持しているため、埋め込み時に ID へ変換し、復元時に名前へ戻す。
 // ID で引けない名前は 'n:<名前>' の形でそのまま載せる（旧バージョンの名前などへの保険）。
-// 形式を変えるときはプレフィックス（v1.）を上げること。未知の形式は読み込まず空スタートに落とす。
+// ペイロード（JSON）の形式を変えるときはプレフィックスを上げること。未知の形式は読み込まず空スタートに落とす。
 const MAKER_URL = 'https://konohashi2580.github.io/lol-guide-maker/';
 const BUILD_PARAM = 'd';
 const BUILD_PREFIX = 'v1.';
+const BUILD_PREFIX_V2 = 'v2.';
 let loadedFromLink = false;   // このページがビルド付きリンクから開かれたか
 let pendingItemRows = null;   // 復元待ちのアイテム行（DD読込後に ID -> 名前 へ解決する）
 
-function b64urlEncode(str) {
-  const bytes = new TextEncoder().encode(str);
+function bytesToB64url(bytes) {
   let bin = '';
   const CHUNK = 0x8000;
   for (let i = 0; i < bytes.length; i += CHUNK) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
   return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
-function b64urlDecode(s) {
+function b64urlToBytes(s) {
   const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  return new TextDecoder().decode(bytes);
+  return bytes;
+}
+function b64urlEncode(str) {
+  return bytesToB64url(new TextEncoder().encode(str));
+}
+function b64urlDecode(s) {
+  return new TextDecoder().decode(b64urlToBytes(s));
+}
+// deflate-raw 圧縮／解凍。Stream API が無い・失敗した場合は null を返す（呼び出し側でフォールバック）。
+async function deflateRaw(bytes) {
+  if (typeof CompressionStream === 'undefined') return null;
+  try {
+    const src = new ReadableStream({
+      start(controller) { controller.enqueue(bytes); controller.close(); }
+    });
+    const reader = src.pipeThrough(new CompressionStream('deflate-raw')).getReader();
+    const chunks = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value); total += value.length;
+    }
+    const out = new Uint8Array(total);
+    let off = 0;
+    for (const c of chunks) { out.set(c, off); off += c.length; }
+    return out;
+  } catch (e) { return null; }
+}
+async function inflateRaw(bytes) {
+  if (typeof DecompressionStream === 'undefined') return null;
+  try {
+    const src = new ReadableStream({
+      start(controller) { controller.enqueue(bytes); controller.close(); }
+    });
+    const reader = src.pipeThrough(new DecompressionStream('deflate-raw')).getReader();
+    const chunks = [];
+    let total = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value); total += value.length;
+    }
+    const out = new Uint8Array(total);
+    let off = 0;
+    for (const c of chunks) { out.set(c, off); off += c.length; }
+    return out;
+  } catch (e) { return null; }
 }
 // 末尾の空要素だけを落とす（途中の空きは位置情報として残す）
 const trimTail = a => { const r = a.slice(); while (r.length && (r[r.length - 1] === '' || r[r.length - 1] == null)) r.pop(); return r; };
 
-function encodeBuild(st) {
+function buildToObject(st) {
   const o = { v: 1 };
   if (st.championId) o.c = st.championId;
   if (st.patch !== DEFAULTS.patch) o.p = st.patch;
@@ -537,7 +591,23 @@ function encodeBuild(st) {
   const tp = trimTail(st.tips); if (tp.length) o.tp = tp;
   if (st.accent !== DEFAULTS.accent) o.ax = st.accent;
   if (st.splashX !== DEFAULTS.splashX) o.sx = Math.round(st.splashX * 1000) / 1000;
-  return BUILD_PREFIX + b64urlEncode(JSON.stringify(o));
+  return o;
+}
+// v1 形式（無圧縮）。読み込み互換と、生成時の比較・フォールバック用。
+function encodeBuild(st) {
+  return BUILD_PREFIX + b64urlEncode(JSON.stringify(buildToObject(st)));
+}
+// 生成側のエンコード：v1 と v2（圧縮）のうち短い方を返す。
+// CompressionStream が使えない環境・圧縮に失敗した場合は v1 になる。
+async function encodeBuildAuto(st) {
+  const json = JSON.stringify(buildToObject(st));
+  const v1 = BUILD_PREFIX + b64urlEncode(json);
+  const compressed = await deflateRaw(new TextEncoder().encode(json));
+  if (compressed) {
+    const v2 = BUILD_PREFIX_V2 + bytesToB64url(compressed);
+    if (v2.length < v1.length) return v2;
+  }
+  return v1;
 }
 
 // クリップボードへテキストをコピーする。Clipboard API が使えない環境では
@@ -561,9 +631,10 @@ async function copyTextToClipboard(text) {
   } catch (e) { return false; }
 }
 // 共有・投稿文に差し込むURL。ビルドが空なら素のメーカーURL、何か入っていればビルド付きURL。
-function buildShareURL() {
+// 生成は v1 / v2 の短い方（encodeBuildAuto）。圧縮が非同期のため、この関数も async。
+async function buildShareURL() {
   if (buildIsEmpty(state)) return MAKER_URL;
-  try { return MAKER_URL + '?' + BUILD_PARAM + '=' + encodeBuild(state); }
+  try { return MAKER_URL + '?' + BUILD_PARAM + '=' + await encodeBuildAuto(state); }
   catch (e) { return MAKER_URL; }
 }
 // 「何も入力されていない」判定（パッチ・色・横位置のような構造値はビルド内容に数えない）
@@ -581,11 +652,27 @@ function buildIsEmpty(st) {
 }
 
 // URLパラメータを検証しながら state へ復元する。不正・未知形式なら null（=通常の空スタート）。
+// v1（無圧縮）と v2（deflate-raw 圧縮）の両方を受ける。v2 の解凍が非同期のため、この関数も async。
+// DecompressionStream が無い環境で v2 を開いた場合も、解凍失敗として null（空スタート）になる。
 // アイテムは DD 読込前には名前へ戻せないため、トークン列のまま pendingItemRows に分けて返す。
-function decodeBuildParam(raw) {
-  if (!raw || typeof raw !== 'string' || !raw.startsWith(BUILD_PREFIX)) return null;
+async function decodeBuildParam(raw) {
+  if (!raw || typeof raw !== 'string') return null;
+  let jsonText = null;
+  if (raw.startsWith(BUILD_PREFIX_V2)) {
+    let plain = null;
+    try { plain = await inflateRaw(b64urlToBytes(raw.slice(BUILD_PREFIX_V2.length))); }
+    catch (e) { return null; }
+    if (!plain) return null;
+    try { jsonText = new TextDecoder().decode(plain); }
+    catch (e) { return null; }
+  } else if (raw.startsWith(BUILD_PREFIX)) {
+    try { jsonText = b64urlDecode(raw.slice(BUILD_PREFIX.length)); }
+    catch (e) { return null; }
+  } else {
+    return null;
+  }
   let o;
-  try { o = JSON.parse(b64urlDecode(raw.slice(BUILD_PREFIX.length))); }
+  try { o = JSON.parse(jsonText); }
   catch (e) { return null; }
   if (!o || typeof o !== 'object' || Array.isArray(o) || o.v !== 1) return null;
   const st = JSON.parse(JSON.stringify(DEFAULTS));
@@ -645,11 +732,11 @@ function decodeBuildParam(raw) {
   }
   return { state: st, itemRows };
 }
-function readBuildFromURL() {
+async function readBuildFromURL() {
   try {
     const raw = new URLSearchParams(location.search).get(BUILD_PARAM);
     if (!raw) return null;
-    return decodeBuildParam(raw);
+    return await decodeBuildParam(raw);
   } catch (e) { return null; }
 }
 // DD読込後：保留していたアイテムトークンを ID -> 日本語名 へ解決して state に戻す
@@ -1129,7 +1216,7 @@ function wireEvents() {
     const champ = dd.champions.get(state.championId);
     const name = champ ? champ.name : state.championId;
     // 投稿文のURLは、ビルドが入っていれば「そのビルドが開くURL」に差し替える（空なら素のURL）
-    const text = `これが誰も知らない${name}だ！\n#LoL #オフメタメーカー\n\n${buildShareURL()}`;
+    const text = `これが誰も知らない${name}だ！\n#LoL #オフメタメーカー\n\n${await buildShareURL()}`;
     const blob = await captureCleanBlob(); // 共有する画像もゴーストなしで描画したものを使う
     if (!blob) return;
     const file = new File([blob], `${state.championId.toLowerCase()}-guide.png`, { type: 'image/png' });
@@ -1148,7 +1235,7 @@ function wireEvents() {
   $('copyBuild').addEventListener('click', async () => {
     // 現在のビルドが開けるURL（空なら素のメーカーURL）をクリップボードへコピーする
     const btn = $('copyBuild');
-    const ok = await copyTextToClipboard(buildShareURL());
+    const ok = await copyTextToClipboard(await buildShareURL());
     if (!ok) { setStatus('クリップボードへのコピーに失敗しました', true); return; }
     const orig = btn.textContent;
     btn.textContent = 'コピーしました';
@@ -1171,7 +1258,8 @@ function wireEvents() {
   purgeSavedState(); // 旧保存データは復元しない（常に空の状態から始める）
   // ビルド付きリンク（?d=...）で開かれた場合だけ、そのビルドを復元する。
   // デコードできないパラメータは無視して、通常の空スタートにフォールバックする。
-  const fromLink = readBuildFromURL();
+  // v2（圧縮）の解凍が非同期のため、ここで await してから後続の初期化を進める。
+  const fromLink = await readBuildFromURL();
   if (fromLink) {
     state = fromLink.state;
     pendingItemRows = fromLink.itemRows;
