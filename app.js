@@ -540,6 +540,26 @@ function encodeBuild(st) {
   return BUILD_PREFIX + b64urlEncode(JSON.stringify(o));
 }
 
+// クリップボードへテキストをコピーする。Clipboard API が使えない環境では
+// 一時的な textarea + execCommand('copy') にフォールバックする。
+async function copyTextToClipboard(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    try { await navigator.clipboard.writeText(text); return true; }
+    catch (e) { /* フォールバックへ */ }
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus();
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return !!ok;
+  } catch (e) { return false; }
+}
 // 共有・投稿文に差し込むURL。ビルドが空なら素のメーカーURL、何か入っていればビルド付きURL。
 function buildShareURL() {
   if (buildIsEmpty(state)) return MAKER_URL;
@@ -1124,6 +1144,16 @@ function wireEvents() {
     }
     // Web Share が使えない環境（PC等）では、Web Intent でテキストのみの投稿画面を開く。
     window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
+  });
+  $('copyBuild').addEventListener('click', async () => {
+    // 現在のビルドが開けるURL（空なら素のメーカーURL）をクリップボードへコピーする
+    const btn = $('copyBuild');
+    const ok = await copyTextToClipboard(buildShareURL());
+    if (!ok) { setStatus('クリップボードへのコピーに失敗しました', true); return; }
+    const orig = btn.textContent;
+    btn.textContent = 'コピーしました';
+    btn.disabled = true;
+    setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1600);
   });
   // 「1からつくる」：URLのビルドパラメータを消してから開き直すことで、空の状態で始める
   // （パラメータを残したまま再読み込みすると、リンクのビルドが復活してしまうため）
