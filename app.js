@@ -87,6 +87,9 @@ const dd = {
   styles: [],             // runesReforged
   itemsByName: new Map(), // 日本語名 -> item エントリ
   itemsByNorm: new Map(), // 空白除去した日本語名 -> item エントリ（表記ゆれ吸収用）
+  itemsById: new Map(),   // アイテムID（文字列） -> item エントリ（URL復元用）
+  itemIdByName: new Map(), // 日本語名 -> アイテムID（文字列）（URL埋め込み用）
+  itemIdByEntry: new Map(), // item エントリ -> アイテムID（文字列）（表記ゆれ経由でもIDを引けるように）
   itemList: [],           // {name, item}
   summoners: new Map(),   // key -> summoner エントリ
 };
@@ -110,12 +113,15 @@ async function loadDD() {
   for (const [id, c] of Object.entries(champ.data)) dd.champions.set(id, c);
   dd.styles = runes;
   for (const [key, s] of Object.entries(summoner.data)) dd.summoners.set(key, s);
-  for (const it of Object.values(items.data)) {
+  for (const [id, it] of Object.entries(items.data)) {
     if (!it || !it.name || !it.gold || !it.gold.purchasable) continue;
     if (it.maps && it.maps['11'] === false) continue;
     if (it.requiredAlly || it.requiredChampion) continue;
+    if (!dd.itemsById.has(id)) dd.itemsById.set(id, it);
+    dd.itemIdByEntry.set(it, id);
     if (!dd.itemsByName.has(it.name)) {
       dd.itemsByName.set(it.name, it);
+      dd.itemIdByName.set(it.name, id);
       const nk = normName(it.name);
       if (!dd.itemsByNorm.has(nk)) dd.itemsByNorm.set(nk, it);
       dd.itemList.push({ name: it.name, item: it });
@@ -461,6 +467,185 @@ function captureCleanBlob() {
       res(b);
     }, 'image/png');
   });
+}
+
+// ---------- ビルドのURL埋め込み（?d=v1.<base64url>） ----------
+// フォーム状態一式を短いキーで JSON 化し、UTF-8 → base64url で URL パラメータに載せる。
+// 識別子は Data Dragon の安定ID（チャンピオンID／サモナースペルキー／ルーンID／アイテムID）を使う。
+// アイテムだけは state 上は日本語名で保持しているため、埋め込み時に ID へ変換し、復元時に名前へ戻す。
+// ID で引けない名前は 'n:<名前>' の形でそのまま載せる（旧バージョンの名前などへの保険）。
+// 形式を変えるときはプレフィックス（v1.）を上げること。未知の形式は読み込まず空スタートに落とす。
+const MAKER_URL = 'https://konohashi2580.github.io/lol-guide-maker/';
+const BUILD_PARAM = 'd';
+const BUILD_PREFIX = 'v1.';
+let loadedFromLink = false;   // このページがビルド付きリンクから開かれたか
+let pendingItemRows = null;   // 復元待ちのアイテム行（DD読込後に ID -> 名前 へ解決する）
+
+function b64urlEncode(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = '';
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + CHUNK));
+  return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+function b64urlDecode(s) {
+  const bin = atob(s.replace(/-/g, '+').replace(/_/g, '/'));
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return new TextDecoder().decode(bytes);
+}
+// 末尾の空要素だけを落とす（途中の空きは位置情報として残す）
+const trimTail = a => { const r = a.slice(); while (r.length && (r[r.length - 1] === '' || r[r.length - 1] == null)) r.pop(); return r; };
+
+function encodeBuild(st) {
+  const o = { v: 1 };
+  if (st.championId) o.c = st.championId;
+  if (st.patch !== DEFAULTS.patch) o.p = st.patch;
+  if (st.role) o.r = st.role;
+  if (st.catchphrase) o.cp = st.catchphrase;
+  if (st.difficulty) o.d = st.difficulty;
+  const sm = trimTail(st.summoners); if (sm.length) o.sm = sm;
+  // スキル順は位置が意味を持つので、未選択を '-' で埋めて文字列化する
+  const mo = st.maxOrder.map(k => k || '-').join(''); if (mo !== '----') o.mo = mo;
+  const ac = st.acquire.map(k => k || '-').join(''); if (ac !== '---') o.ac = ac;
+  if (st.passiveDesc) o.pd = st.passiveDesc;
+  if (st.runeMain !== '') o.rm = st.runeMain;
+  const rp = trimTail(st.runeMainPicks); if (rp.length) o.rp = rp;
+  if (st.runeSub !== '') o.rs = st.runeSub;
+  const sp = trimTail(st.runeSubPicks); if (sp.length) o.sp = sp;
+  if (st.runeLabels && Object.keys(st.runeLabels).length) o.rl = st.runeLabels;
+  if (st.itemsHeadingSub) o.ih = st.itemsHeadingSub;
+  const rows = st.itemRows.map(row => {
+    const ids = [];
+    row.items.forEach(nm => {
+      const name = String(nm || '').trim();
+      if (!name) return;
+      const entry = findItemByName(name);
+      const id = entry ? dd.itemIdByEntry.get(entry) : null;
+      ids.push(id != null && /^\d+$/.test(id) ? +id : 'n:' + name);
+    });
+    return [row.title || '', ids];
+  });
+  while (rows.length && !rows[rows.length - 1][0] && !rows[rows.length - 1][1].length) rows.pop();
+  if (rows.length) o.ir = rows;
+  const s1 = trimTail(st.strengths); if (s1.length) o.st = s1;
+  const s2 = trimTail(st.weaknesses); if (s2.length) o.wk = s2;
+  const cb = st.combos.map(c => [c.keys || '', c.note || '']);
+  while (cb.length && !cb[cb.length - 1][0] && !cb[cb.length - 1][1]) cb.pop();
+  if (cb.length) o.cb = cb;
+  const mt = trimTail(st.motto); if (mt.length) o.mt = mt;
+  const tp = trimTail(st.tips); if (tp.length) o.tp = tp;
+  if (st.accent !== DEFAULTS.accent) o.ax = st.accent;
+  if (st.splashX !== DEFAULTS.splashX) o.sx = Math.round(st.splashX * 1000) / 1000;
+  return BUILD_PREFIX + b64urlEncode(JSON.stringify(o));
+}
+
+// 共有・投稿文に差し込むURL。ビルドが空なら素のメーカーURL、何か入っていればビルド付きURL。
+function buildShareURL() {
+  if (buildIsEmpty(state)) return MAKER_URL;
+  try { return MAKER_URL + '?' + BUILD_PARAM + '=' + encodeBuild(state); }
+  catch (e) { return MAKER_URL; }
+}
+// 「何も入力されていない」判定（パッチ・色・横位置のような構造値はビルド内容に数えない）
+function buildIsEmpty(st) {
+  if (st.championId || st.role || st.catchphrase || st.passiveDesc || st.itemsHeadingSub) return false;
+  if (st.difficulty) return false;
+  if (st.summoners.some(x => x) || st.maxOrder.some(x => x) || st.acquire.some(x => x)) return false;
+  if (st.runeMain !== '' || st.runeSub !== '') return false;
+  if (st.runeMainPicks.some(x => x !== '') || st.runeSubPicks.some(x => x !== '')) return false;
+  if (st.runeLabels && Object.keys(st.runeLabels).length) return false;
+  if (st.itemRows.some(r => r.title || r.items.some(n => String(n || '').trim()))) return false;
+  if (st.strengths.some(x => x) || st.weaknesses.some(x => x) || st.motto.some(x => x) || st.tips.some(x => x)) return false;
+  if (st.combos.some(c => c.keys || c.note)) return false;
+  return true;
+}
+
+// URLパラメータを検証しながら state へ復元する。不正・未知形式なら null（=通常の空スタート）。
+// アイテムは DD 読込前には名前へ戻せないため、トークン列のまま pendingItemRows に分けて返す。
+function decodeBuildParam(raw) {
+  if (!raw || typeof raw !== 'string' || !raw.startsWith(BUILD_PREFIX)) return null;
+  let o;
+  try { o = JSON.parse(b64urlDecode(raw.slice(BUILD_PREFIX.length))); }
+  catch (e) { return null; }
+  if (!o || typeof o !== 'object' || Array.isArray(o) || o.v !== 1) return null;
+  const st = JSON.parse(JSON.stringify(DEFAULTS));
+  const S = (v, max) => typeof v === 'string' ? v.slice(0, max || 300) : '';
+  const N = v => (typeof v === 'number' && isFinite(v)) ? v : (typeof v === 'string' && v.trim() !== '' && isFinite(+v) ? +v : '');
+  const strArr = (v, len) => { const a = Array.isArray(v) ? v : []; const r = []; for (let i = 0; i < len; i++) r.push(typeof a[i] === 'string' ? a[i].slice(0, 300) : ''); return r; };
+  const idArr = (v, len) => { const a = Array.isArray(v) ? v : []; const r = []; for (let i = 0; i < len; i++) { const n = N(a[i]); r.push(n === '' ? '' : n); } return r; };
+  const orderArr = (v, len, keys) => {
+    let chars = [];
+    if (typeof v === 'string') chars = v.split('');
+    else if (Array.isArray(v)) chars = v.map(x => typeof x === 'string' ? x : '');
+    const r = [];
+    for (let i = 0; i < len; i++) r.push(keys.includes(chars[i]) ? chars[i] : '');
+    return r;
+  };
+  st.championId = S(o.c, 60);
+  if (typeof o.p === 'string' && o.p) st.patch = o.p.slice(0, 12);
+  st.role = S(o.r); st.catchphrase = S(o.cp); st.passiveDesc = S(o.pd); st.itemsHeadingSub = S(o.ih);
+  const dv = N(o.d); st.difficulty = dv === '' ? 0 : Math.max(0, Math.min(10, Math.round(dv)));
+  st.summoners = strArr(o.sm, 2);
+  st.maxOrder = orderArr(o.mo, 4, 'QWER');
+  st.acquire = orderArr(o.ac, 3, 'QWE');
+  st.runeMain = N(o.rm); st.runeSub = N(o.rs);
+  st.runeMainPicks = idArr(o.rp, 4);
+  st.runeSubPicks = idArr(o.sp, 2);
+  if (o.rl && typeof o.rl === 'object' && !Array.isArray(o.rl)) {
+    const rl = {};
+    for (const [k, v] of Object.entries(o.rl)) if (typeof v === 'string') rl[k] = v.slice(0, 60);
+    st.runeLabels = rl;
+  }
+  st.strengths = strArr(o.st, 3);
+  st.weaknesses = strArr(o.wk, 2);
+  st.motto = strArr(o.mt, 2);
+  st.tips = strArr(o.tp, 3);
+  if (Array.isArray(o.cb)) {
+    o.cb.slice(0, 2).forEach((pair, i) => {
+      if (Array.isArray(pair)) st.combos[i] = { keys: S(pair[0]), note: S(pair[1]) };
+    });
+  }
+  if (typeof o.ax === 'string' && /^#[0-9a-fA-F]{6}$/.test(o.ax)) st.accent = o.ax;
+  const sx = N(o.sx); if (sx !== '') st.splashX = Math.max(0, Math.min(1, sx));
+  // アイテム行：タイトルは即 state へ、アイテムはトークン（数値=ID／文字列=名前）のまま分離する
+  let itemRows = null;
+  if (Array.isArray(o.ir)) {
+    itemRows = [];
+    o.ir.slice(0, ITEM_ROWS_MAX).forEach((row, r) => {
+      if (!Array.isArray(row)) return;
+      const title = S(row[0]);
+      st.itemRows[r].title = title;
+      const toks = [];
+      (Array.isArray(row[1]) ? row[1] : []).slice(0, ITEMS_PER_ROW).forEach(t => {
+        if (typeof t === 'number' && isFinite(t)) toks.push(t);
+        else if (typeof t === 'string' && t) toks.push(t.startsWith('n:') ? t.slice(2) : t);
+      });
+      itemRows.push({ title, items: toks });
+    });
+  }
+  return { state: st, itemRows };
+}
+function readBuildFromURL() {
+  try {
+    const raw = new URLSearchParams(location.search).get(BUILD_PARAM);
+    if (!raw) return null;
+    return decodeBuildParam(raw);
+  } catch (e) { return null; }
+}
+// DD読込後：保留していたアイテムトークンを ID -> 日本語名 へ解決して state に戻す
+function resolvePendingItems() {
+  if (!pendingItemRows) return;
+  pendingItemRows.forEach((row, r) => {
+    if (!state.itemRows[r]) return;
+    const names = row.items.map(tok => {
+      if (typeof tok === 'number') { const it = dd.itemsById.get(String(tok)); return it ? it.name : ''; }
+      return String(tok || '');
+    });
+    while (names.length < ITEMS_PER_ROW) names.push('');
+    state.itemRows[r].items = names.slice(0, ITEMS_PER_ROW);
+  });
+  pendingItemRows = null;
+  itemIconUpdaters.forEach(f => f());
 }
 
 // ---------- UI ----------
@@ -841,12 +1026,13 @@ function applyStateToForm() {
   $('passiveDesc').value = state.passiveDesc;
   $('itemsHeadingSub').value = state.itemsHeadingSub;
 }
-function applyChampionMeta(det) {
+function applyChampionMeta(det, keepDifficulty = false) {
   const listEntry = dd.champions.get(state.championId || det.id);
   $('passiveName').textContent = det.passive ? det.passive.name : '-';
   const dDetail = det.info && det.info.difficulty > 0 ? det.info.difficulty : 0;
   const dList = listEntry && listEntry.info && listEntry.info.difficulty > 0 ? listEntry.info.difficulty : 0;
-  state.difficulty = dDetail || dList || state.difficulty;
+  // リンクから復元したときは、ビルドに保存された難易度を DD の既定値で上書きしない
+  if (!keepDifficulty) state.difficulty = dDetail || dList || state.difficulty;
   $('difficulty').value = state.difficulty;
   $('difficultyText').value = `難易度 ${state.difficulty} / 10`;
   updateSkillIcons();
@@ -922,7 +1108,8 @@ function wireEvents() {
   $('postX').addEventListener('click', async () => {
     const champ = dd.champions.get(state.championId);
     const name = champ ? champ.name : state.championId;
-    const text = `これが誰も知らない${name}だ！\n#LoL #オフメタメーカー\n\nhttps://konohashi2580.github.io/lol-guide-maker/`;
+    // 投稿文のURLは、ビルドが入っていれば「そのビルドが開くURL」に差し替える（空なら素のURL）
+    const text = `これが誰も知らない${name}だ！\n#LoL #オフメタメーカー\n\n${buildShareURL()}`;
     const blob = await captureCleanBlob(); // 共有する画像もゴーストなしで描画したものを使う
     if (!blob) return;
     const file = new File([blob], `${state.championId.toLowerCase()}-guide.png`, { type: 'image/png' });
@@ -938,15 +1125,30 @@ function wireEvents() {
     // Web Share が使えない環境（PC等）では、Web Intent でテキストのみの投稿画面を開く。
     window.open(`https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`, '_blank', 'noopener');
   });
-  $('reset').addEventListener('click', () => {
+  // 「1からつくる」：URLのビルドパラメータを消してから開き直すことで、空の状態で始める
+  // （パラメータを残したまま再読み込みすると、リンクのビルドが復活してしまうため）
+  const startFresh = () => {
+    try { history.replaceState(null, '', location.pathname); } catch (e) { /* noop */ }
     try { localStorage.removeItem(LS_KEY); } catch (e) { /* noop */ }
     location.reload();
-  });
+  };
+  $('freshStart').addEventListener('click', startFresh);
+  $('reset').addEventListener('click', startFresh);
 }
 
 // ---------- 初期化 ----------
 (async function init() {
   purgeSavedState(); // 旧保存データは復元しない（常に空の状態から始める）
+  // ビルド付きリンク（?d=...）で開かれた場合だけ、そのビルドを復元する。
+  // デコードできないパラメータは無視して、通常の空スタートにフォールバックする。
+  const fromLink = readBuildFromURL();
+  if (fromLink) {
+    state = fromLink.state;
+    pendingItemRows = fromLink.itemRows;
+    loadedFromLink = true;
+    const notice = $('loadedNotice');
+    if (notice) notice.hidden = false;
+  }
   normalizeItemRows();
   buildStaticControls();
   applyStateToForm();
@@ -958,11 +1160,13 @@ function wireEvents() {
     buildSummonerOptions();
     buildRuneStyleOptions();
     itemIconUpdaters.forEach(f => f());
+    resolvePendingItems(); // リンク復元したアイテムIDを日本語名へ解決する
     applyStateToForm();
+    if (state.championId && !dd.champions.has(state.championId)) state.championId = ''; // 不正なIDは未選択扱い
     if (state.championId) {
       const det = await loadDetail(state.championId);
       dd.detail = det; dd.detailId = state.championId;
-      applyChampionMeta(det);
+      applyChampionMeta(det, loadedFromLink);
     }
     setStatus(`Data Dragon ${dd.version}（ja_JP）のデータで描画しています。アイコン等は公式CDNから読み込みます。`);
     draw();

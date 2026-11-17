@@ -142,6 +142,26 @@ input[type="range"] { width: 100%; margin-top: 6px; }
 .itemCandidate img { width: 28px; height: 28px; border-radius: 4px; flex: none; background: #000; }
 .comboRow { display: flex; gap: 8px; }
 .comboRow label { flex: 1; }
+/* 「1からつくる」ボタン：作例を見に来た人が次に押す入口として、フォーム最上部に目立たせる */
+.freshStart {
+  width: 100%;
+  padding: 14px 18px;
+  font-size: 16px;
+  background: var(--gold);
+  border-color: var(--gold);
+  color: #191c24;
+}
+/* リンクからビルドを読み込んだときの案内（画面表示のみ。生成画像には含まれない） */
+.loadedNotice {
+  margin: 0;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--gold);
+  background: var(--panel);
+  border: 1px solid var(--gold);
+  border-radius: 8px;
+}
 .actions { display: flex; gap: 10px; }
 button {
   padding: 12px 18px;
